@@ -13,58 +13,8 @@ API_KEY = st.secrets["aurora"]["api_key"]
 USERNAME = st.secrets["aurora"]["username"]
 PASSWORD = st.secrets["aurora"]["password"]
 BASE_URL = st.secrets["aurora"]["base_url"]
-TOKEN_FILE = "C:\\Users\\Admin\Desktop\\Inverter\\token.json"
-
-def is_file_empty(file_path):
-    """Check if the file exists and is empty."""
-    return os.path.exists(file_path) and os.stat(file_path).st_size == 0
-
-def load_token():
-    """Load the token from the file and check if it's expired due to inactivity."""
-    if is_file_empty(TOKEN_FILE):
-        print("Token file is empty. Re-authentication needed.")
-        return None
-
-    try:
-        with open(TOKEN_FILE, 'r') as f:
-            data = json.load(f)
-            token = data.get("token")
-            last_used = data.get("last_used")
-
-            if token and last_used:
-                last_used_time = datetime.fromisoformat(last_used)
-                # Check if the token has been inactive for more than 60 minutes
-                if datetime.now() - last_used_time < timedelta(minutes=60):
-                    print("Using saved token.")
-                    return token
-
-                print("Token expired due to inactivity.")
-            else:
-                print("Invalid token data or missing fields.")
-    except (json.JSONDecodeError, ValueError):
-        print("Failed to parse token file. Re-authentication needed.")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-    
-    return None
-
-def save_token(token):
-    """Save the token to a file."""
-    data = {
-        "token": token,
-        "last_used": datetime.now().isoformat()  # Track last usage
-    }
-    with open(TOKEN_FILE, 'w') as f:
-        json.dump(data, f)
-    print("Token saved and last used time updated.")
 
 def authenticate():
-    token = load_token()  # Check if token is already saved
-    print(token)
-    if token:
-        print("Using saved token.")
-        return token  # Reuse saved token
-
     print("Authenticating...")
     url = f"{BASE_URL}/authenticate"
 
@@ -83,7 +33,6 @@ def authenticate():
             token = response.json().get("result")
             if token:
                 print(f"Authentication successful! Token: {token}")
-                save_token(token)  # Save token for future use
                 return token
             else:
                 print("Token not found in the response.")
