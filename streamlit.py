@@ -44,22 +44,6 @@ def authenticate():
         print(f"Failed to authenticate: {response.status_code} - {response.text}")
         return None
 
-def update_token_usage():
-    """Update the last used timestamp in the token file."""
-    if os.path.exists(TOKEN_FILE):
-        try:
-            with open(TOKEN_FILE, 'r+') as f:
-                data = json.load(f)
-                data["last_used"] = datetime.now().isoformat()
-                f.seek(0)
-                json.dump(data, f)
-                f.truncate()
-            print("Token usage time updated.")
-        except (json.JSONDecodeError, ValueError):
-            print("Failed to update token usage due to invalid token data.")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
 gmt_plus_7 = pytz.timezone('Asia/Bangkok')
 
 # Function to fetch data
