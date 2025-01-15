@@ -7,6 +7,7 @@ import os
 import csv
 import json
 from datetime import datetime, timedelta
+import time
 
 # Load secrets
 API_KEY = st.secrets["aurora"]["api_key"]
@@ -95,15 +96,15 @@ token = st.session_state.token
 
 # Load plant names from the JSON file
 with open('all_inverter.json', 'r') as f:
-    plant = json.load(f)
+    inverters = json.load(f)
 
-plant_names = list(plant.keys())
+plant_names = list(inverters.keys())
 
 # Dropdown for plant selection
 selected_plant = st.selectbox("Select a Plant", plant_names)
 
 if st.button("Fetch and Visualize Data"):
-    loggers = plant.get(selected_plant, [])
+    loggers = inverters.get(selected_plant, [])
     start_date = datetime.now().strftime("%Y%m%d")
     end_date = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
@@ -123,13 +124,34 @@ if st.button("Fetch and Visualize Data"):
         filtered_data = df.dropna(subset=['value'])
         filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
 
+        # Sort by datetime to ensure proper ordering
+        filtered_data = filtered_data.sort_values(by='datetime')
+
+        # Introduce None for breaks in continuity
+        time_diff = filtered_data['datetime'].diff().dt.total_seconds()
+        threshold = 15 * 60  # 15 minutes in seconds
+        filtered_data.loc[time_diff > threshold, 'value'] = None
+
+        with open('all_plant.json', 'r') as f:
+            plants = json.load(f)
+
+        entity = None
+        for plant, entityID in list(plants.items()):
+            if plant == selected_plant:
+                entity = entityID
+
+        # Render a clickable title as Markdown in Streamlit
+        url = f"https://www.auroravision.net/dashboard/#{entity}"  # Replace with your desired URL
+        title_with_link = f"[{selected_plant} AC Output: Power]({url})"
+        st.markdown(f"### {title_with_link}")
+
         # Plot using Plotly
         fig = px.line(
             filtered_data,
             x='datetime',
             y='value',
             color='entityID',
-            title=f'{selected_plant} AC Output: Power',
+            # title=f'{selected_plant} AC Output: Power',
             labels={'datetime': 'Time', 'value': 'Power Output (Watts)'},
             template='plotly_white'
         )

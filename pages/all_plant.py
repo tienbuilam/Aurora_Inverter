@@ -7,6 +7,8 @@ import os
 import csv
 import json
 from datetime import datetime, timedelta
+import logging
+import time
 
 # Load secrets
 API_KEY = st.secrets["aurora"]["api_key"]
@@ -47,7 +49,6 @@ def authenticate():
 gmt_plus_7 = pytz.timezone('Asia/Bangkok')
 
 # Function to fetch data
-@st.cache_data
 def fetch_current_date(token, entityID, plant_name, start_date, end_date,
                        data_type="GenerationPower", value_type="average", sample_size="Min15", retries=3, delay=5):
     headers = {
@@ -69,32 +70,39 @@ def fetch_current_date(token, entityID, plant_name, start_date, end_date,
                 f"?sampleSize={sample_size}&startDate={start_date}&endDate={end_date}&timeZone=Asia/Bangkok")
 
     for attempt in range(1, retries + 1):
-        response = requests.get(data_url, headers=headers, auth=(USERNAME, PASSWORD))
-        if response.status_code == 200:
-            # Parse and save data
-            data = response.json()
-            with open(filename, mode='a', newline='') as file:
-                writer = csv.writer(file)
-                for entry in data.get('result', []):
-                    epoch = entry.get('start')
-                    value = entry.get('value', '')
-                    units = entry.get('units', '')
+        try:
+            response = requests.get(data_url, headers=headers, auth=(USERNAME, PASSWORD))
+            if response.status_code == 200:
+                # Parse and save data
+                data = response.json()
+                with open(filename, mode='a', newline='') as file:
+                    writer = csv.writer(file)
+                    for entry in data.get('result', []):
+                        epoch = entry.get('start')
+                        value = entry.get('value', '')
+                        units = entry.get('units', '')
 
-                    if epoch:
-                        utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc)
-                        local_time = utc_time.astimezone(gmt_plus_7)
-                        datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S')
-                        writer.writerow([epoch, datetime_str, entityID, value, units])
+                        if epoch:
+                            utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc)
+                            local_time = utc_time.astimezone(gmt_plus_7)
+                            datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S')
+                            writer.writerow([epoch, datetime_str, entityID, value, units])
 
-            print(f"Successfully fetched data for {entityID} on attempt {attempt}.")
-            return  # Exit after successful fetch
-        else:
-            # Log failure and retry
-            print(f"Attempt {attempt} failed for {entityID}: {response.status_code} - {response.text}")
-            if attempt < retries:
-                time.sleep(delay)  # Wait before retrying
+                logging.info(f"Successfully fetched data for {entityID} on attempt {attempt}.")
+                return  # Exit after successful fetch
             else:
+                # Log the failure without revealing sensitive details
+                logging.warning(f"Attempt {attempt} failed for {entityID}: {response.status_code}")
+                if attempt < retries:
+                    time.sleep(delay)  # Wait before retrying
+        except Exception as e:
+            # Log generic error message
+            logging.error(f"Error fetching data for {entityID} on attempt {attempt}: {str(e)}")
+            if attempt >= retries:
                 st.error(f"Failed to fetch data for {entityID} after {retries} attempts.")
+
+    # If all retries fail, raise a user-friendly error message
+    st.warning(f"Unable to fetch data for entity {entityID} after {retries} retries.")
 
 # Streamlit App
 st.title("All Plant Power Output Visualization")
@@ -111,14 +119,14 @@ start_date = datetime.now().strftime("%Y%m%d")
 end_date = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
 with open('all_inverter.json', 'r') as f:
-    plant = json.load(f)
+    inverters = json.load(f)
 
-for plant_name, loggers in list(plant.items()):
+for plant_name, loggers in list(inverters.items()):
     for logger in loggers:
         fetch_current_date(token, entityID=logger, plant_name=plant_name,
                            start_date=start_date, end_date=end_date)
 
-for plant_name, loggers in list(plant.items()):
+for plant_name, loggers in list(inverters.items()):
     df = pd.DataFrame()
     for logger in loggers:
         filename = f"temp/{plant_name}/{logger}.csv"
@@ -130,13 +138,34 @@ for plant_name, loggers in list(plant.items()):
         filtered_data = df.dropna(subset=['value'])
         filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
 
+        # Sort by datetime to ensure proper ordering
+        filtered_data = filtered_data.sort_values(by='datetime')
+
+        # Introduce None for breaks in continuity
+        time_diff = filtered_data['datetime'].diff().dt.total_seconds()
+        threshold = 15 * 60  # 15 minutes in seconds
+        filtered_data.loc[time_diff > threshold, 'value'] = None
+
+        with open('all_plant.json', 'r') as f:
+            plants = json.load(f)
+
+        entity = None
+        for plant, entityID in list(plants.items()):
+            if plant == plant_name:
+                entity = entityID
+
+        # Render a clickable title as Markdown in Streamlit
+        url = f"https://www.auroravision.net/dashboard/#{entity}"  # Replace with your desired URL
+        title_with_link = f"[{plant_name} AC Output: Power]({url})"
+        st.markdown(f"### {title_with_link}")
+
         # Plot using Plotly
         fig = px.line(
             filtered_data,
             x='datetime',
             y='value',
             color='entityID',
-            title=f'{plant_name} AC Output: Power',
+            # title=f'{plant_name} AC Output: Power',
             labels={'datetime': 'Time', 'value': 'Power Output (Watts)'},
             template='plotly_white'
         )
