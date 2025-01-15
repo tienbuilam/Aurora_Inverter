@@ -7,7 +7,8 @@ import os
 import csv
 import json
 from datetime import datetime, timedelta
-import time
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Load secrets
 API_KEY = st.secrets["aurora"]["api_key"]
@@ -15,87 +16,87 @@ USERNAME = st.secrets["aurora"]["username"]
 PASSWORD = st.secrets["aurora"]["password"]
 BASE_URL = st.secrets["aurora"]["base_url"]
 
+gmt_plus_7 = pytz.timezone('Asia/Bangkok')
+
+# Function to authenticate
 def authenticate():
     print("Authenticating...")
     url = f"{BASE_URL}/authenticate"
-
-    # Add the API key to the headers
     headers = {
         "X-AuroraVision-ApiKey": API_KEY,
         "Content-Type": "application/json"
     }
-
-    # Use Basic Authentication with the username and password
     response = requests.get(url, headers=headers, auth=(USERNAME, PASSWORD))
-
     if response.status_code == 200:
         try:
-            # Extract the token from the JSON response body
             token = response.json().get("result")
             if token:
-                print(f"Authentication successful! Token: {token}")
+                print("Authentication successful!")
                 return token
             else:
                 print("Token not found in the response.")
-                return None
         except ValueError:
             print("Failed to parse JSON response.")
-            return None
     else:
         print(f"Failed to authenticate: {response.status_code} - {response.text}")
-        return None
+    return None
 
-gmt_plus_7 = pytz.timezone('Asia/Bangkok')
-
-# Function to fetch data
-@st.cache_data
-def fetch_current_date(token, entityID, plant_name, start_date, end_date,
-                       data_type="GenerationPower", value_type="average", sample_size="Min15"):
+# Function to fetch data for a logger in parallel
+def fetch_current_date_parallel(token, entityID, plant_name, start_date, end_date,
+                                data_type="GenerationPower", value_type="average", sample_size="Min15"):
     headers = {
         "X-AuroraVision-Token": token,
         "Content-Type": "application/json"
     }
-
-    folder_path = f"temp/{plant_name}"
-    os.makedirs(folder_path, exist_ok=True)
-    filename = os.path.join(folder_path, f"{entityID}.csv")
-
-    with open(filename, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["epoch_start", "datetime", "entityID", "value", "units"])
-
     data_url = (f"{BASE_URL}/v1/stats/power/timeseries/{entityID}/{data_type}/{value_type}"
                 f"?sampleSize={sample_size}&startDate={start_date}&endDate={end_date}&timeZone=Asia/Bangkok")
-    response = requests.get(data_url, headers=headers, auth=(USERNAME, PASSWORD))
-
-    if response.status_code == 200:
-        data = response.json()
-        with open(filename, mode='a', newline='') as file:
-            writer = csv.writer(file)
+    try:
+        response = requests.get(data_url, headers=headers, auth=(USERNAME, PASSWORD))
+        if response.status_code == 200:
+            data = response.json()
+            results = []
             for entry in data.get('result', []):
                 epoch = entry.get('start')
                 value = entry.get('value', '')
                 units = entry.get('units', '')
-
                 if epoch:
                     utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc)
                     local_time = utc_time.astimezone(gmt_plus_7)
                     datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S')
-                    writer.writerow([epoch, datetime_str, entityID, value, units])
-    else:
-        st.error(f"Failed to fetch data: {response.status_code} - {response.text}")
+                    results.append([epoch, datetime_str, entityID, value, units])
+            return entityID, results
+        else:
+            logging.warning(f"Failed to fetch data for {entityID} - Status: {response.status_code}")
+            return entityID, []
+    except Exception as e:
+        logging.error(f"Error fetching data for {entityID}: {e}")
+        return entityID, []
 
-# Streamlit App
+# Function to fetch all data for a single plant in parallel
+def fetch_plant_data_parallel(token, plant_name, loggers, start_date, end_date):
+    all_results = []
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [
+            executor.submit(
+                fetch_current_date_parallel, token, logger, plant_name, start_date, end_date
+            )
+            for logger in loggers
+        ]
+        for future in as_completed(futures):
+            all_results.append(future.result())
+    return all_results
+
+# Streamlit app
 st.title("Plant Power Output Visualization")
 
-# Get token for API authentication
+# Authenticate and get token
 if "token" not in st.session_state:
     st.session_state.token = authenticate()
 
 token = st.session_state.token
 
-# Load plant names from the JSON file
-with open('all_inverter.json', 'r') as f:
+# Load plant names from file
+with open('all_inverters.json', 'r') as f:
     inverters = json.load(f)
 
 plant_names = list(inverters.keys())
@@ -108,35 +109,33 @@ if st.button("Fetch and Visualize Data"):
     start_date = datetime.now().strftime("%Y%m%d")
     end_date = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
-    for logger in loggers:
-        fetch_current_date(token, logger, selected_plant, start_date, end_date)
+    # Fetch data for the selected plant in parallel
+    plant_data = fetch_plant_data_parallel(token, selected_plant, loggers, start_date, end_date)
 
-    # Read and combine data from CSV files for the selected plant
+    # Process and save data
     df = pd.DataFrame()
-    for logger in loggers:
-        filename = f"temp/{selected_plant}/{logger}.csv"
-        if os.path.exists(filename):
-            df_logger = pd.read_csv(filename)
+    for entityID, results in plant_data:
+        if results:
+            df_logger = pd.DataFrame(results, columns=["epoch_start", "datetime", "entityID", "value", "units"])
             df = pd.concat([df, df_logger], ignore_index=True)
-    
-    # Filter and visualize data
+
     if not df.empty:
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')  # Convert non-numeric to NaN
+
         filtered_data = df.dropna(subset=['value'])
         filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
-
-        # Sort by datetime to ensure proper ordering
         filtered_data = filtered_data.sort_values(by='datetime')
 
         # Introduce None for breaks in continuity
         time_diff = filtered_data['datetime'].diff().dt.total_seconds()
-        threshold = 15 * 60  # 15 minutes in seconds
+        threshold = 15 * 60
         filtered_data.loc[time_diff > threshold, 'value'] = None
 
-        with open('all_plant.json', 'r') as f:
+        with open('all_plants.json', 'r') as f:
             plants = json.load(f)
 
         entity = None
-        for plant, entityID in list(plants.items()):
+        for plant, entityID in plants.items():
             if plant == selected_plant:
                 entity = entityID
 
@@ -145,19 +144,18 @@ if st.button("Fetch and Visualize Data"):
         title_with_link = f"[{selected_plant} AC Output: Power]({url})"
         st.markdown(f"### {title_with_link}")
 
-        # Plot using Plotly
+        # Plot graph
         fig = px.line(
             filtered_data,
             x='datetime',
             y='value',
             color='entityID',
-            # title=f'{selected_plant} AC Output: Power',
+            title=f"{selected_plant} Power Output",
             labels={'datetime': 'Time', 'value': 'Power Output (Watts)'},
-            template='plotly_white'
+            template='plotly_white',
         )
-        # Update y-axis with a fixed maximum value of 100kW (100,000 Watts)
         fig.update_yaxes(range=[0, 100000], title="Power Output (Watts)")
         fig.update_traces(mode='lines+markers')
-        st.plotly_chart(fig)
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning("No data available for the selected plant.")
+        st.warning(f"No data available for {selected_plant}.")
