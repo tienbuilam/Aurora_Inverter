@@ -139,10 +139,11 @@ if st.button("Fetch and Visualize Data"):
             filename = f"temp/{plant_name}/{logger}.csv"
             if os.path.exists(filename):
                 df_logger = pd.read_csv(filename)
-                df = pd.concat([df, df_logger], ignore_index=True)
+                if not df_logger.empty:
+                    df = pd.concat([df, df_logger], ignore_index=True)
 
         if not df.empty:
-            filtered_data = df.dropna(subset=['value'])
+            filtered_data = df.dropna(subset=['value']).copy()
             filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
             filtered_data = filtered_data.sort_values(by='datetime')
 

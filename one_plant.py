@@ -117,12 +117,13 @@ if st.button("Fetch and Visualize Data"):
     for entityID, results in plant_data:
         if results:
             df_logger = pd.DataFrame(results, columns=["epoch_start", "datetime", "entityID", "value", "units"])
-            df = pd.concat([df, df_logger], ignore_index=True)
+            if not df_logger.empty:
+                df = pd.concat([df, df_logger], ignore_index=True)
 
     if not df.empty:
         df['value'] = pd.to_numeric(df['value'], errors='coerce')  # Convert non-numeric to NaN
 
-        filtered_data = df.dropna(subset=['value'])
+        filtered_data = df.dropna(subset=['value']).copy()
         filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
         filtered_data = filtered_data.sort_values(by='datetime')
 
