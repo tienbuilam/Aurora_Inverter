@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import plotly.express as px
 import requests
@@ -115,69 +116,68 @@ with open('all_inverters.json', 'r') as f:
 start_date = datetime.now().strftime("%Y%m%d")
 end_date = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
-if st.button("Fetch and Visualize Data"):
-    # Fetch data in parallel
-    all_data = fetch_all_data_parallel(token, inverters, start_date, end_date)
+# Fetch data in parallel
+all_data = fetch_all_data_parallel(token, inverters, start_date, end_date)
 
-    # Process and save data
-    for plant_name, entityID, results in all_data:
-        if results:
-            folder_path = f"temp/{plant_name}"
-            os.makedirs(folder_path, exist_ok=True)
-            filename = os.path.join(folder_path, f"{entityID}.csv")
-            with open(filename, mode='w', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow(["epoch_start", "datetime", "entityID", "value", "units"])
-                writer.writerows(results)
+# Process and save data
+for plant_name, entityID, results in all_data:
+    if results:
+        folder_path = f"temp/{plant_name}"
+        os.makedirs(folder_path, exist_ok=True)
+        filename = os.path.join(folder_path, f"{entityID}.csv")
+        with open(filename, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["epoch_start", "datetime", "entityID", "value", "units"])
+            writer.writerows(results)
 
-    st.success("Data fetching completed. Generating graphs...")
+st.success("Data fetching completed. Generating graphs...")
 
-    # Generate graphs for each plant
-    for plant_name, loggers in inverters.items():
-        df = pd.DataFrame()
-        for logger in loggers:
-            filename = f"temp/{plant_name}/{logger}.csv"
-            if os.path.exists(filename):
-                df_logger = pd.read_csv(filename)
-                if not df_logger.empty:
-                    df = pd.concat([df, df_logger], ignore_index=True)
+# Generate graphs for each plant
+for plant_name, loggers in inverters.items():
+    df = pd.DataFrame()
+    for logger in loggers:
+        filename = f"temp/{plant_name}/{logger}.csv"
+        if os.path.exists(filename):
+            df_logger = pd.read_csv(filename)
+            if not df_logger.empty:
+                df = pd.concat([df, df_logger], ignore_index=True)
 
-        if not df.empty:
-            filtered_data = df.dropna(subset=['value']).copy()
-            filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
-            filtered_data = filtered_data.sort_values(by='datetime')
+    if not df.empty:
+        filtered_data = df.dropna(subset=['value']).copy()
+        filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
+        filtered_data = filtered_data.sort_values(by='datetime')
 
-            # Introduce None for breaks in continuity
-            time_diff = filtered_data['datetime'].diff().dt.total_seconds()
-            threshold = 15 * 60
-            filtered_data.loc[time_diff > threshold, 'value'] = None
+        # Introduce None for breaks in continuity
+        time_diff = filtered_data['datetime'].diff().dt.total_seconds()
+        threshold = 15 * 60
+        filtered_data.loc[time_diff > threshold, 'value'] = None
 
-            with open('all_plants.json', 'r') as f:
-                plants = json.load(f)
+        with open('all_plants.json', 'r') as f:
+            plants = json.load(f)
 
-            entity = None
-            for plant, entityID in list(plants.items()):
-                if plant == plant_name:
-                    entity = entityID
+        entity = None
+        for plant, entityID in list(plants.items()):
+            if plant == plant_name:
+                entity = entityID
 
-            # Render a clickable title as Markdown in Streamlit
-            url = f"https://www.auroravision.net/dashboard/#{entity}"  # Replace with your desired URL
-            title_with_link = f"[{plant_name} AC Output: Power]({url})"
-            st.markdown(f"### {title_with_link}")
+        # Render a clickable title as Markdown in Streamlit
+        url = f"https://www.auroravision.net/dashboard/#{entity}"  # Replace with your desired URL
+        title_with_link = f"[{plant_name} AC Output: Power]({url})"
+        st.markdown(f"### {title_with_link}")
 
-            # Plot graph
-            fig = px.line(
-                filtered_data,
-                x='datetime',
-                y='value',
-                color='entityID',
-                title=f"{plant_name} Power Output",
-                labels={'datetime': 'Time', 'value': 'Power Output (Watts)'},
-                template='plotly_white'
-            )
-            fig.update_yaxes(range=[0, 100000], title="Power Output (Watts)")
-            fig.update_traces(mode='lines+markers')
+        # Plot graph
+        fig = px.line(
+            filtered_data,
+            x='datetime',
+            y='value',
+            color='entityID',
+            title=f"{plant_name} Power Output",
+            labels={'datetime': 'Time', 'value': 'Power Output (Watts)'},
+            template='plotly_white'
+        )
+        fig.update_yaxes(range=[0, 100000], title="Power Output (Watts)")
+        fig.update_traces(mode='lines+markers')
 
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning(f"No data available for {plant_name}.")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning(f"No data available for {plant_name}.")
