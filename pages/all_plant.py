@@ -9,7 +9,6 @@ import csv
 import json
 from datetime import datetime, timedelta
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Load secrets
@@ -99,6 +98,10 @@ def fetch_all_data_parallel(token, inverters, start_date, end_date):
 
 # Streamlit app
 st.title("All Plant Power Output Visualization")
+
+# Auto-refresh logic
+if 7 <= datetime.now(gmt_plus_7).hour <= 17:
+    st_autorefresh(interval=900_000, key="auto_refresh")  # 15 minutes = 900,000 ms
 
 # Authenticate and get token
 if "token" not in st.session_state:
