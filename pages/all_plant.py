@@ -21,7 +21,6 @@ gmt_plus_7 = pytz.timezone('Asia/Bangkok')
 
 # Function to authenticate
 def authenticate():
-    print("Authenticating...")
     url = f"{BASE_URL}/authenticate"
 
     headers = {
@@ -35,7 +34,6 @@ def authenticate():
         try:
             token = response.json().get("result")
             if token:
-                print("Authentication successful!")
                 return token
             else:
                 print("Token not found in the response.")
@@ -145,7 +143,7 @@ for plant_name, loggers in inverters.items():
             if not df_logger.empty:
                 df = pd.concat([df, df_logger], ignore_index=True)
 
-    if not df.empty:
+    if df['value'].notnull().any():
         filtered_data = df.dropna(subset=['value']).copy()
         filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
         filtered_data = filtered_data.sort_values(by='datetime')
@@ -183,4 +181,4 @@ for plant_name, loggers in inverters.items():
 
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning(f"No data available for {plant_name}.")
+        continue
