@@ -5,7 +5,6 @@ import pandas as pd
 import plotly.express as px
 import requests
 import pytz
-import matplotlib.pyplot as plt
 import os
 import csv
 import json
