@@ -301,13 +301,4 @@ for plant, entityID in plants.items():
 
     else:
         # Fallback to latest available data with warning
-        if power_df['value'].notnull().any():
-            latest_power = power_df[power_df['value'].notnull()].iloc[-1]
-
-        fig = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = round(latest_power['value']/1000, 2),
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Solar Generation (kW)"},))
-
-        st.plotly_chart(fig, use_container_width=True)
+        continue
