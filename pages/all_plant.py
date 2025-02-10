@@ -174,7 +174,7 @@ for plant_name, loggers in inverters.items():
             y='value',
             color='entityID',
             title=f"{plant_name} Power Output",
-            labels={'datetime': 'Time', 'value': 'Power Output (Watts)'},
+            labels={'datetime': 'Time', 'value': 'Power Output (kW)'},
             template='plotly_white'
         )
         # Set x-axis range to full day
@@ -189,8 +189,8 @@ for plant_name, loggers in inverters.items():
             title="Time (Hours)"
         )
 
-        fig.update_yaxes(range=[0, 100], title="Power Output (Kilowatts)")
-        fig.update_traces(hovertemplate='Power: %{y:.2f} kW <br> Time: %{x}', mode='lines+markers')
+        fig.update_yaxes(range=[0, 100], title="Power Output (kW)")
+        fig.update_traces(hovertemplate='%{x} <br> Power: %{y:.2f} kW', mode='lines+markers')
 
         st.plotly_chart(fig, use_container_width=True)
     else:
