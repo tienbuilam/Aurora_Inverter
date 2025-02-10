@@ -270,7 +270,7 @@ for plant, entityID in plants.items():
         fig.update_layout(
             title='Energy Balance',
             xaxis_title='Time (Hours)',
-            yaxis_title='Power (W)',
+            yaxis_title='Power (kW)',
             hovermode='x unified',
             showlegend=True,
             legend=dict(
