@@ -151,7 +151,7 @@ def fetch_grid_power_export(token, entityID, plant_name, start_date, end_date,
 st.title("Real-Time Power Flow Visualization")
 
 # Auto-refresh logic
-if 7 <= datetime.now(gmt_plus_7).hour <= 17:
+if 6 <= datetime.now(gmt_plus_7).hour <= 18:
     st_autorefresh(interval=900_000, key="auto_refresh")  # 15 minutes = 900,000 ms
 
 # Authenticate and get token
@@ -202,27 +202,31 @@ for plant, entityID in plants.items():
 
     if not valid_data.empty:
         # Get latest synchronized data point
-        valid_data['Consumption'] = valid_data['value_power'] - valid_data['value_grid']
+        valid_data['Consumption'] = (valid_data['value_power'] - valid_data['value_grid']) / 1000  # Convert to kW
         valid_data['Consumption-fromGrid'] = valid_data['value_grid'].apply(lambda x: -x if x < 0 else 0)
+        valid_data['Consumption-fromGrid'] = valid_data['Consumption-fromGrid'] / 1000  # Convert to kW
         valid_data['Solar-toGrid'] = valid_data['value_grid'].apply(lambda x: x if x > 0 else 0)
-        valid_data = valid_data.drop(columns=['value_grid'])
+        valid_data['Solar-toGrid'] = valid_data['Solar-toGrid'] / 1000  # Convert to kW
+        valid_data = valid_data.drop(columns=['value_grid']) # Drop the original grid column
         valid_data['Solar'] = valid_data['value_power']
-        valid_data = valid_data.drop(columns=['value_power'])
+        valid_data['Solar'] = valid_data['Solar'] / 1000  # Convert to kW
+        valid_data = valid_data.drop(columns=['value_power']) # Drop the original power column
+        valid_data['Consumption-fromSolar'] = valid_data['Solar'] - valid_data['Solar-toGrid']
 
         # Convert datetime to datetime type if it's string
         valid_data['datetime'] = pd.to_datetime(valid_data['datetime'])
 
-        # Calculate consumption from solar (total power minus export to grid)
-        valid_data['Consumption-fromSolar'] = valid_data['Solar'] - valid_data['Solar-toGrid']
+        current_date = datetime.now(gmt_plus_7).date()
 
+        # Create the figure
         # Create the figure
         fig = go.Figure()
 
         # Common parameters
         area_kwargs = {
             'line': dict(width=0),
-            'hovertemplate': '%{y:.1f} W',
-            'stackgroup': 'source'
+            'stackgroup': 'source',
+            'hovertemplate': '%{y:.2f} kW'
         }
 
         # Add Solar (DC) base layer
@@ -257,7 +261,7 @@ for plant, entityID in plants.items():
             y=valid_data['Solar'],
             name='Solar (AC)',
             line=dict(color='blue', width=1.5),
-            hovertemplate='%{y:.1f} W'
+            hovertemplate='%{y:.2f} kW'
         ))
 
         # Add total consumption line
@@ -266,7 +270,7 @@ for plant, entityID in plants.items():
             y=valid_data['Consumption'],
             name='Consumption',
             line=dict(color='black', width=1.5, dash='dot'),
-            hovertemplate='%{y:.1f} W'
+            hovertemplate='%{y:.2f} kW'
         ))
 
         # Update layout
@@ -288,7 +292,9 @@ for plant, entityID in plants.items():
             xaxis=dict(
                 gridcolor='rgba(128,128,128,0.2)',
                 showgrid=True,
+                range=[gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("06:00", "%H:%M").time())), gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("18:00", "%H:%M").time()))],
                 tickformat='%H:%M',
+                dtick=3600000*2  # Show tick every 2 hours (in milliseconds)
             ),
             yaxis=dict(
                 gridcolor='rgba(128,128,128,0.2)',
@@ -301,14 +307,4 @@ for plant, entityID in plants.items():
         st.plotly_chart(fig, use_container_width=True)
 
     else:
-        # Fallback to latest available data with warning
-        if power_df['value'].notnull().any():
-            latest_power = power_df[power_df['value'].notnull()].iloc[-1]
-
-        fig = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = round(latest_power['value']/1000, 2),
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Solar Generation (kW)"},))
-
-        st.plotly_chart(fig, use_container_width=True)
+        continue
