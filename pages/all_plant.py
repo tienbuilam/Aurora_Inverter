@@ -98,7 +98,7 @@ def fetch_all_data_parallel(token, inverters, start_date, end_date):
 st.title("All Plant Power Output Visualization")
 
 # Auto-refresh logic
-if 7 <= datetime.now(gmt_plus_7).hour <= 17:
+if 6 <= datetime.now(gmt_plus_7).hour <= 18:
     st_autorefresh(interval=900_000, key="auto_refresh")  # 15 minutes = 900,000 ms
 
 # Authenticate and get token
@@ -152,6 +152,7 @@ for plant_name, loggers in inverters.items():
         time_diff = filtered_data['datetime'].diff().dt.total_seconds()
         threshold = 15 * 60
         filtered_data.loc[time_diff > threshold, 'value'] = None
+        filtered_data['value'] = filtered_data['value'] / 1000  # Convert to kW
 
         with open('all_plants.json', 'r') as f:
             plants = json.load(f)
@@ -176,8 +177,20 @@ for plant_name, loggers in inverters.items():
             labels={'datetime': 'Time', 'value': 'Power Output (Watts)'},
             template='plotly_white'
         )
-        fig.update_yaxes(range=[0, 100000], title="Power Output (Watts)")
-        fig.update_traces(mode='lines+markers')
+        # Set x-axis range to full day
+        current_date = datetime.now(gmt_plus_7).date()
+        start_time = gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("06:00", "%H:%M").time()))
+        end_time = gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("18:00", "%H:%M").time()))
+
+        fig.update_xaxes(
+            range=[start_time, end_time],
+            tickformat="%H:%M",
+            dtick=3600000*2, # Show tick every 2 hours (in milliseconds)
+            title="Time (Hours)"
+        )
+
+        fig.update_yaxes(range=[0, 100], title="Power Output (Kilowatts)")
+        fig.update_traces(hovertemplate='Power: %{y:.2f} kW <br> Time: %{x}', mode='lines+markers')
 
         st.plotly_chart(fig, use_container_width=True)
     else:
