@@ -22,7 +22,6 @@ gmt_plus_7 = pytz.timezone('Asia/Bangkok')
 
 # Function to authenticate
 def authenticate():
-    print("Authenticating...")
     url = f"{BASE_URL}/authenticate"
 
     headers = {
@@ -36,7 +35,6 @@ def authenticate():
         try:
             token = response.json().get("result")
             if token:
-                print("Authentication successful!")
                 return token
             else:
                 print("Token not found in the response.")
@@ -95,8 +93,6 @@ def fetch_inverter_power(token, entityID, plant_name, start_date, end_date,
     else:
         print(f"Failed to fetch data for {start_date} to {end_date}: {response.status_code} - {response.text}")
 
-    print(f"Data refreshed and saved to {filename}")
-
 def fetch_grid_power_export(token, entityID, plant_name, start_date, end_date,
                             data_type="GridPowerExport", value_type="average", sample_size="Min15"):
     headers = {
@@ -143,8 +139,6 @@ def fetch_grid_power_export(token, entityID, plant_name, start_date, end_date,
                     writer.writerow([epoch, datetime_str, value, units])
     else:
         print(f"Failed to fetch data for {start_date} to {end_date}: {response.status_code} - {response.text}")
-
-    print(f"Data refreshed and saved to {filename}")
 
 # Streamlit app
 st.title("Real-Time Power Flow Visualization")
