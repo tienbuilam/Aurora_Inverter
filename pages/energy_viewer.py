@@ -11,6 +11,8 @@ import json
 from datetime import datetime, timedelta
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from functools import wraps
 
 # Load secrets
 API_KEY = st.secrets["aurora"]["api_key"]
@@ -20,6 +22,7 @@ BASE_URL = st.secrets["aurora"]["base_url"]
 
 gmt_plus_7 = pytz.timezone('Asia/Bangkok')
 
+# Function to authenticate
 # Function to authenticate
 def authenticate():
     url = f"{BASE_URL}/authenticate"
@@ -44,6 +47,11 @@ def authenticate():
         print(f"Failed to authenticate: {response.status_code} - {response.text}")
     return None
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type((requests.RequestException, ValueError))
+)
 def fetch_inverter_power(token, entityID, plant_name, start_date, end_date, 
                         data_type="GenerationPower", value_type="average", sample_size="Min15"):
     # Prepare headers for API requests
@@ -91,8 +99,13 @@ def fetch_inverter_power(token, entityID, plant_name, start_date, end_date,
                     # Write each entry to the CSV
                     writer.writerow([epoch, datetime_str, value, units])
     else:
-        print(f"Failed to fetch data for {start_date} to {end_date}: {response.status_code} - {response.text}")
+        print(f"Failed to fetch data for {start_date} to {end_date}: {response.status_code} - {plant_name}")
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type((requests.RequestException, ValueError))
+)
 def fetch_grid_power_export(token, entityID, plant_name, start_date, end_date,
                             data_type="GridPowerExport", value_type="average", sample_size="Min15"):
     headers = {
@@ -139,6 +152,25 @@ def fetch_grid_power_export(token, entityID, plant_name, start_date, end_date,
                     writer.writerow([epoch, datetime_str, value, units])
     else:
         print(f"Failed to fetch data for {start_date} to {end_date}: {response.status_code} - {response.text}")
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type((requests.RequestException, ValueError))
+)
+def fetch_data_wrapper(token, inverters, start_date, end_date):
+    """Wrapper for data fetching with retry mechanism"""
+    try:
+        # Verify and refresh token if needed
+        if not verify_token(token):
+            logger.info("Token invalid, refreshing...")
+            token = authenticate()
+            st.session_state.token = token
+            
+        return fetch_all_data_parallel(token, inverters, start_date, end_date)
+    except Exception as e:
+        logger.error(f"Error in fetch_data_wrapper: {str(e)}")
+        raise
 
 # Streamlit app
 st.title("Real-Time Power Flow Visualization")
@@ -189,7 +221,7 @@ for plant, entityID in plants.items():
     )
 
     # Find latest timestamp with both values available
-    valid_data = merged_df.dropna(subset=['value_power', 'value_grid'])
+    valid_data = merged_df.dropna(subset=['value_power', 'value_grid']).copy()
     
     st.markdown(f"### [{plant} Energy Balance](https://www.auroravision.net/dashboard/#{entityID})")
 
@@ -222,7 +254,6 @@ for plant, entityID in plants.items():
             'hovertemplate': '%{y:.2f} kW'
         }
 
-        # Add Solar (DC) base layer
         fig.add_trace(go.Scatter(
             x=valid_data['datetime'],
             y=valid_data['Consumption-fromSolar'],
@@ -231,20 +262,19 @@ for plant, entityID in plants.items():
             **area_kwargs
         ))
 
-        # Conditional stacking for Export/Import
-        fig.add_trace(go.Scatter(
-            x=valid_data['datetime'],
-            y=valid_data['Solar-toGrid'],
-            name='Solar - to Grid',
-            fillcolor='rgba(255, 255, 0, 0.7)',  # Yellow
-            **area_kwargs
-        ))
-
         fig.add_trace(go.Scatter(
             x=valid_data['datetime'],
             y=valid_data['Consumption-fromGrid'],
             name='Consumption - from Grid',
             fillcolor='rgba(255, 0, 0, 0.7)',  # Red
+            **area_kwargs
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=valid_data['datetime'],
+            y=valid_data['Solar-toGrid'],
+            name='Solar - to Grid',
+            fillcolor='rgba(255, 255, 0, 0.7)',  # Yellow
             **area_kwargs
         ))
 

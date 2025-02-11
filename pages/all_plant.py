@@ -10,6 +10,8 @@ import json
 from datetime import datetime, timedelta
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from functools import wraps
 
 # Load secrets
 API_KEY = st.secrets["aurora"]["api_key"]
@@ -44,6 +46,11 @@ def authenticate():
     return None
 
 # Function to fetch data for a logger in parallel
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type((requests.RequestException, ValueError))
+)
 def fetch_current_date_parallel(token, entityID, plant_name, start_date, end_date,
                                 data_type="GenerationPower", value_type="average", sample_size="Min15"):
     headers = {
@@ -94,6 +101,38 @@ def fetch_all_data_parallel(token, inverters, start_date, end_date):
 
     return all_results
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type((requests.RequestException, ValueError))
+)
+def fetch_data_wrapper(token, inverters, start_date, end_date):
+    """Wrapper for data fetching with retry mechanism"""
+    try:
+        # Verify and refresh token if needed
+        if not verify_token(token):
+            logger.info("Token invalid, refreshing...")
+            token = authenticate()
+            st.session_state.token = token
+            
+        return fetch_all_data_parallel(token, inverters, start_date, end_date)
+    except Exception as e:
+        logger.error(f"Error in fetch_data_wrapper: {str(e)}")
+        raise
+
+def check_inverter_time(data):
+    data['datetime'] = pd.to_datetime(data['datetime'])
+    time = data[data['value'].notnull()]['datetime'].iloc[-1]
+    datetime_obj = datetime.now(gmt_plus_7)
+
+    # Ensure both have the same timezone (GMT+7)
+    datetime_obj = datetime_obj.astimezone(pytz.timezone('Asia/Bangkok'))  # Convert datetime to GMT+7
+    timestamp_obj = time.tz_localize('Asia/Bangkok')  # Ensure the Timestamp is localized to GMT+7
+
+    if datetime_obj - timedelta(minutes=30) > timestamp_obj:
+        entityID = data['entityID'].iloc[0]
+        st.warning(f"{entityID} is not up-to-date. Last updated at: " + timestamp_obj.strftime('%Y-%m-%d %H:%M:%S'))
+
 # Streamlit app
 st.title("All Plant Power Output Visualization")
 
@@ -140,10 +179,11 @@ for plant_name, loggers in inverters.items():
         filename = f"temp/{plant_name}/{logger}.csv"
         if os.path.exists(filename):
             df_logger = pd.read_csv(filename)
-            if not df_logger.empty:
+            if df_logger['value'].notnull().any():
+                check_inverter_time(df_logger)
                 df = pd.concat([df, df_logger], ignore_index=True)
 
-    if df['value'].notnull().any():
+    if not df.empty:
         filtered_data = df.dropna(subset=['value']).copy()
         filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
         filtered_data = filtered_data.sort_values(by='datetime')
