@@ -20,7 +20,6 @@ gmt_plus_7 = pytz.timezone('Asia/Bangkok')
 
 # Function to authenticate
 def authenticate():
-    print("Authenticating...")
     url = f"{BASE_URL}/authenticate"
     headers = {
         "X-AuroraVision-ApiKey": API_KEY,
@@ -31,7 +30,6 @@ def authenticate():
         try:
             token = response.json().get("result")
             if token:
-                print("Authentication successful!")
                 return token
             else:
                 print("Token not found in the response.")

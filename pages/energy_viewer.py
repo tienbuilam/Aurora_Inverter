@@ -222,10 +222,9 @@ for plant, entityID in plants.items():
 
     # Find latest timestamp with both values available
     valid_data = merged_df.dropna(subset=['value_power', 'value_grid']).copy()
-    
-    st.markdown(f"### [{plant} Energy Balance](https://www.auroravision.net/dashboard/#{entityID})")
 
     if not valid_data.empty:
+        st.markdown(f"### [{plant} Energy Balance](https://www.auroravision.net/dashboard/#{entityID})")
         # Get latest synchronized data point
         valid_data['Consumption'] = (valid_data['value_power'] - valid_data['value_grid']) / 1000  # Convert to kW
         valid_data['Consumption-fromGrid'] = valid_data['value_grid'].apply(lambda x: -x if x < 0 else 0)
