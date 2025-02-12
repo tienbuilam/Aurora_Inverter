@@ -134,8 +134,7 @@ def check_inverter_time(data):
         st.warning(f"Inverter {inverter_id} is not up-to-date. Last updated at: " + timestamp_obj.strftime('%Y-%m-%d %H:%M:%S'), icon="⚠️")
 
 def compare_latest_inverter_power(data):
-    time = pd.Timestamp("2025-02-12 11:15:00")
-    # time = data[data['value'].notnull()]['datetime'].iloc[-1]
+    time = data[data['value'].notnull()]['datetime'].iloc[-1]
     data = data[data['datetime'] == time].sort_values(by='value', ascending=False)
     inverter_ids = data['entityID'].unique()
     if data['value'].iloc[0] > 50:
