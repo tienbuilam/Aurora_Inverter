@@ -176,8 +176,8 @@ def fetch_data_wrapper(token, inverters, start_date, end_date):
 st.title("Real-Time Power Flow Visualization")
 
 # Auto-refresh logic
-if 6 <= datetime.now(gmt_plus_7).hour <= 18:
-    st_autorefresh(interval=900_000, key="auto_refresh")  # 15 minutes = 900,000 ms
+if 8 <= datetime.now(gmt_plus_7).hour <= 17:
+    st_autorefresh(interval=900000, key="auto_refresh")
 
 # Authenticate and get token
 if "token" not in st.session_state:

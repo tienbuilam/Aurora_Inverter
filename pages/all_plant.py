@@ -132,8 +132,11 @@ def check_inverter_time(data):
     if datetime_obj - timedelta(minutes=30) > timestamp_obj:
         inverter_id = data['entityID'].iloc[0]
         st.warning(f"Inverter {inverter_id} is not up-to-date. Last updated at: " + timestamp_obj.strftime('%Y-%m-%d %H:%M:%S'), icon="⚠️")
+        return False
+    else:
+        return True
 
-def compare_latest_inverter_power(data):
+def compare_latest_inverter_power(data):    
     time = data[data['value'].notnull()]['datetime'].iloc[-1]
     data = data[data['datetime'] == time].sort_values(by='value', ascending=False)
     inverter_ids = data['entityID'].unique()
@@ -144,12 +147,22 @@ def compare_latest_inverter_power(data):
     else:
         return None
 
+def check_low_power_period(data):
+    inverter_id = data['entityID'].iloc[0]
+    time = data[data['value'].notnull()]['datetime']
+    value = data[data['value'].notnull()]['value']
+    if value.iloc[-1] < 5000:
+        if value.iloc[-2] < 5000 and value.iloc[-3] < 5000:
+            st.warning(f"Inverter {inverter_id} detects low power from {time.iloc[-3].strftime('%Y-%m-%d %H:%M:%S')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M:%S')}", icon="⚠️")
+        elif value.iloc[-2] > 50000:
+            st.warning(f"Inverter {inverter_id} detects high power drop from {time.iloc[-2].strftime('%Y-%m-%d %H:%M:%S')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M:%S')}", icon="⚠️")
+
 # Streamlit app
 st.title("All Plant Power Output Visualization")
 
 # Auto-refresh logic
-if 6 <= datetime.now(gmt_plus_7).hour <= 18:
-    st_autorefresh(interval=900_000, key="auto_refresh")  # 15 minutes = 900,000 ms
+if 8 <= datetime.now(gmt_plus_7).hour <= 17:
+    st_autorefresh(interval=900000, key="auto_refresh")
 
 # Authenticate and get token
 if "token" not in st.session_state:
@@ -191,7 +204,8 @@ for plant_name, loggers in inverters.items():
         if os.path.exists(filename):
             df_logger = pd.read_csv(filename)
             if df_logger['value'].notnull().any():
-                check_inverter_time(df_logger)
+                if check_inverter_time(df_logger):
+                    check_low_power_period(df_logger)
                 df = pd.concat([df, df_logger], ignore_index=True)
 
     if not df.empty:
