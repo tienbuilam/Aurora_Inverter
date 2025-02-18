@@ -142,7 +142,7 @@ def compare_latest_inverter_power(data):
     inverter_ids = data['entityID'].unique()
     if data['value'].iloc[0] > 50:
         for i in range(1, len(inverter_ids)):
-            if data['value'].iloc[i] < data['value'].iloc[0] * 0.3:
+            if data['value'].iloc[i] < data['value'].iloc[0] * 0.25:
                 st.warning(f"Inverter {inverter_ids[i]} is underperforming. Last updated at: {time.strftime('%Y-%m-%d %H:%M:%S')}", icon="⚠️")
     else:
         return None
@@ -151,7 +151,7 @@ def check_low_power_period(data):
     inverter_id = data['entityID'].iloc[0]
     time = data[data['value'].notnull()]['datetime']
     value = data[data['value'].notnull()]['value']
-    if value.iloc[-1] < 5000:
+    if value.iloc[-1] < 5000 and value.size > 3:
         if value.iloc[-2] < 5000 and value.iloc[-3] < 5000:
             st.warning(f"Inverter {inverter_id} detects low power from {time.iloc[-3].strftime('%Y-%m-%d %H:%M:%S')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M:%S')}", icon="⚠️")
         elif value.iloc[-2] > 50000:
