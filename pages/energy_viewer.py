@@ -177,7 +177,7 @@ st.title("Real-Time Power Flow Visualization")
 
 # Auto-refresh logic
 if 8 <= datetime.now(gmt_plus_7).hour <= 17:
-    st_autorefresh(interval=900000, key="auto_refresh")
+    st_autorefresh(interval=600_000, key="auto_refresh")
 
 # Authenticate and get token
 if "token" not in st.session_state:
@@ -305,8 +305,8 @@ for plant, entityID in plants.items():
             legend=dict(
                 yanchor="top",
                 y=0.99,
-                xanchor="left",
-                x=0.01
+                xanchor="right",
+                x=0.99
             ),
             plot_bgcolor='white',
             paper_bgcolor='white',
