@@ -7,6 +7,7 @@ import pytz
 import os
 import csv
 import json
+import math
 from datetime import datetime, timedelta
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,6 +15,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from functools import wraps
 
 # Load secrets
+BOT_TOKEN = st.secrets["telegram"]["bot_token"]
+CHAT_ID = st.secrets["telegram"]["chat_id"]
 API_KEY = st.secrets["aurora"]["api_key"]
 USERNAME = st.secrets["aurora"]["username"]
 PASSWORD = st.secrets["aurora"]["password"]
@@ -120,7 +123,26 @@ def fetch_data_wrapper(token, inverters, start_date, end_date):
         logger.error(f"Error in fetch_data_wrapper: {str(e)}")
         raise
 
-def check_inverter_time(data):
+def send_telegram_alert(message):
+    if 8 <= datetime.now(gmt_plus_7).hour <= 16:
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            
+            payload = {
+                "chat_id": CHAT_ID,
+                "text": message,
+                "parse_mode": "HTML"
+            }
+            
+            response = requests.post(url, json=payload, timeout=10)
+            return response.status_code == 200
+        except Exception as e:
+            logging.error(f"Telegram send failed: {str(e)}")
+            return False
+    else:
+        return False
+
+def check_inverter_time(data, plant_name):
     data['datetime'] = pd.to_datetime(data['datetime'])
     time = data[data['value'].notnull()]['datetime'].iloc[-1]
     datetime_obj = datetime.now(gmt_plus_7)
@@ -131,37 +153,45 @@ def check_inverter_time(data):
 
     if datetime_obj - timedelta(minutes=30) > timestamp_obj:
         inverter_id = data['entityID'].iloc[0]
-        st.warning(f"Inverter {inverter_id} is not up-to-date. Last updated at: " + timestamp_obj.strftime('%Y-%m-%d %H:%M:%S'), icon="⚠️")
+        msg = f"{plant_name}, inverter {inverter_id} outdated.\nLast update: {timestamp_obj.strftime('%Y-%m-%d %H:%M')}"
+        st.warning(msg, icon="⚠️")
+        send_telegram_alert(msg)
         return False
     else:
         return True
 
-def compare_latest_inverter_power(data):    
+def compare_latest_inverter_power(data, plant_name):    
     time = data[data['value'].notnull()]['datetime'].iloc[-1]
     data = data[data['datetime'] == time].sort_values(by='value', ascending=False)
     inverter_ids = data['entityID'].unique()
     if data['value'].iloc[0] > 50:
         for i in range(1, len(inverter_ids)):
             if data['value'].iloc[i] < data['value'].iloc[0] * 0.25:
-                st.warning(f"Inverter {inverter_ids[i]} is underperforming. Last updated at: {time.strftime('%Y-%m-%d %H:%M:%S')}", icon="⚠️")
+                msg = f"{plant_name}, inverter {inverter_ids[i]} is underperforming with {round(data['value'].iloc[i], 2)} kW.\nTime: {time.strftime('%Y-%m-%d %H:%M')}"
+                st.warning(msg, icon="⚠️")
+                send_telegram_alert(msg)
     else:
         return None
 
-def check_low_power_period(data):
+def check_low_power_period(data, plant_name):
     inverter_id = data['entityID'].iloc[0]
     time = data[data['value'].notnull()]['datetime']
     value = data[data['value'].notnull()]['value']
     if value.iloc[-1] < 5000 and value.size > 3:
         if value.iloc[-2] < 5000 and value.iloc[-3] < 5000:
-            st.warning(f"Inverter {inverter_id} detects low power from {time.iloc[-3].strftime('%Y-%m-%d %H:%M:%S')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M:%S')}", icon="⚠️")
+            msg = f"{plant_name}, inverter {inverter_id} detects low power.\nFrom {time.iloc[-3].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
+            st.warning(msg, icon="⚠️")
+            send_telegram_alert(msg)
         elif value.iloc[-2] > 50000:
-            st.warning(f"Inverter {inverter_id} detects high power drop from {time.iloc[-2].strftime('%Y-%m-%d %H:%M:%S')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M:%S')}", icon="⚠️")
+            msg = f"{plant_name}, inverter {inverter_id} detects high power drop.\nFrom {time.iloc[-2].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
+            st.warning(msg, icon="⚠️")
+            send_telegram_alert(msg)
 
 # Streamlit app
 st.title("All Plant Power Output Visualization")
 
 # Auto-refresh logic
-if 8 <= datetime.now(gmt_plus_7).hour <= 17:
+if 8 <= datetime.now(gmt_plus_7).hour <= 16:
     st_autorefresh(interval=600_000, key="auto_refresh")
 
 # Authenticate and get token
@@ -204,8 +234,8 @@ for plant_name, loggers in inverters.items():
         if os.path.exists(filename):
             df_logger = pd.read_csv(filename)
             if df_logger['value'].notnull().any():
-                if check_inverter_time(df_logger):
-                    check_low_power_period(df_logger)
+                if check_inverter_time(df_logger, plant_name):
+                    check_low_power_period(df_logger, plant_name)
                 df = pd.concat([df, df_logger], ignore_index=True)
 
     if not df.empty:
@@ -219,7 +249,7 @@ for plant_name, loggers in inverters.items():
         filtered_data.loc[time_diff > threshold, 'value'] = None
         filtered_data['value'] = filtered_data['value'] / 1000  # Convert to kW
 
-        compare_latest_inverter_power(filtered_data)
+        compare_latest_inverter_power(filtered_data, plant_name)
 
         with open('all_plants.json', 'r') as f:
             plants = json.load(f)
