@@ -188,7 +188,7 @@ def check_low_power_period(data, plant_name):
             send_telegram_alert(msg)
 
 # Streamlit app
-st.title("All Plant Power Output Visualization")
+st.title("All Plant Power Output Alert")
 
 # Auto-refresh logic
 if 8 <= datetime.now(gmt_plus_7).hour <= 16:
@@ -200,7 +200,7 @@ if "token" not in st.session_state:
 
 token = st.session_state.token
 
-st.write("Fetching data for all plants today in 15-minute intervals...")
+st.write("Notification will be sent if any issues are detected from 8am to 17pm.")
 
 # Load inverters from file
 with open('all_inverters.json', 'r') as f:
@@ -224,7 +224,7 @@ for plant_name, entityID, results in all_data:
             writer.writerow(["epoch_start", "datetime", "entityID", "value", "units"])
             writer.writerows(results)
 
-st.success("Data fetching completed. Generating graphs...")
+st.success("Data fetching completed. Errors will be displayed below.")
 
 # Generate graphs for each plant
 for plant_name, loggers in inverters.items():
