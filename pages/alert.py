@@ -123,6 +123,25 @@ def fetch_data_wrapper(token, inverters, start_date, end_date):
         logger.error(f"Error in fetch_data_wrapper: {str(e)}")
         raise
 
+def send_telegram_alert(message):
+    if 8 <= datetime.now(gmt_plus_7).hour <= 16:
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            
+            payload = {
+                "chat_id": CHAT_ID,
+                "text": message,
+                "parse_mode": "HTML"
+            }
+            
+            response = requests.post(url, json=payload, timeout=10)
+            return response.status_code == 200
+        except Exception as e:
+            logging.error(f"Telegram send failed: {str(e)}")
+            return False
+    else:
+        return False
+
 def check_inverter_time(data, plant_name):
     data['datetime'] = pd.to_datetime(data['datetime'])
     time = data[data['value'].notnull()]['datetime'].iloc[-1]
@@ -136,6 +155,7 @@ def check_inverter_time(data, plant_name):
         inverter_id = data['entityID'].iloc[0]
         msg = f"{plant_name}, inverter {inverter_id} outdated.\nLast update: {timestamp_obj.strftime('%Y-%m-%d %H:%M')}"
         st.warning(msg, icon="⚠️")
+        send_telegram_alert(msg)
         return False
     else:
         return True
@@ -149,6 +169,7 @@ def compare_latest_inverter_power(data, plant_name):
             if data['value'].iloc[i] < data['value'].iloc[0] * 0.25:
                 msg = f"{plant_name}, inverter {inverter_ids[i]} is underperforming with {round(data['value'].iloc[i], 2)} kW.\nTime: {time.strftime('%Y-%m-%d %H:%M')}"
                 st.warning(msg, icon="⚠️")
+                send_telegram_alert(msg)
     else:
         return None
 
@@ -160,9 +181,11 @@ def check_low_power_period(data, plant_name):
         if value.iloc[-2] < 5000 and value.iloc[-3] < 5000:
             msg = f"{plant_name}, inverter {inverter_id} detects low power.\nFrom {time.iloc[-3].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
             st.warning(msg, icon="⚠️")
+            send_telegram_alert(msg)
         elif value.iloc[-2] > 50000:
             msg = f"{plant_name}, inverter {inverter_id} detects high power drop.\nFrom {time.iloc[-2].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
             st.warning(msg, icon="⚠️")
+            send_telegram_alert(msg)
 
 # Streamlit app
 st.title("All Plant Power Output Visualization")
@@ -234,39 +257,6 @@ for plant_name, loggers in inverters.items():
         entity = None
         for plant, entityID in list(plants.items()):
             if plant == plant_name:
-                entity = entityID
-
-        # Render a clickable title as Markdown in Streamlit
-        url = f"https://www.auroravision.net/dashboard/#{entity}"  # Replace with your desired URL
-        title_with_link = f"[{plant_name} AC Output: Power]({url})"
-        st.markdown(f"### {title_with_link}")
-
-        # Plot graph
-        fig = px.line(
-            filtered_data,
-            x='datetime',
-            y='value',
-            color='entityID',
-            title=f"{plant_name} Power Output",
-            labels={'datetime': 'Time', 'value': 'Power Output (kW)'},
-            template='plotly_white'
-        )
-        # Set x-axis range to full day
-        current_date = datetime.now(gmt_plus_7).date()
-        start_time = gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("06:00", "%H:%M").time()))
-        end_time = gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("18:00", "%H:%M").time()))
-
-        fig.update_xaxes(
-            range=[start_time, end_time],
-            tickformat="%H:%M",
-            dtick=3600000*2, # Show tick every 2 hours (in milliseconds)
-            title="Time (Hours)"
-        )
-
-        fig.update_yaxes(range=[0, 100], title="Power Output (kW)")
-        fig.update_traces(hovertemplate='%{x} <br> Power: %{y:.2f} kW', mode='lines+markers')
-
-        st.plotly_chart(fig, use_container_width=True)
-        
+                entity = entityID     
     else:
         continue
