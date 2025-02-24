@@ -220,7 +220,7 @@ for plant_name, loggers in inverters.items():
 
     if not df.empty:
         for plant_name, logger in drop:
-            msg(f"{plant_name}, inverter {logger} is deactivated.")
+            msg = f"{plant_name}, inverter {logger} is deactivated."
             st.warning(msg, icon="⚠️")
         filtered_data = df.dropna(subset=['value']).copy()
         filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
