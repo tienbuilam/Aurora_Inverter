@@ -206,6 +206,7 @@ st.success("Data fetching completed. Generating graphs...")
 # Generate graphs for each plant
 for plant_name, loggers in inverters.items():
     df = pd.DataFrame()
+    drop = []
     for logger in loggers:
         filename = f"temp/{plant_name}/{logger}.csv"
         if os.path.exists(filename):
@@ -214,8 +215,13 @@ for plant_name, loggers in inverters.items():
                 if check_inverter_time(df_logger, plant_name):
                     check_low_power_period(df_logger, plant_name)
                 df = pd.concat([df, df_logger], ignore_index=True)
+            else:
+                drop.append([plant_name, logger])
 
     if not df.empty:
+        for plant_name, logger in drop:
+            msg(f"{plant_name}, inverter {logger} is deactivated.")
+            st.warning(msg, icon="⚠️")
         filtered_data = df.dropna(subset=['value']).copy()
         filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
         filtered_data = filtered_data.sort_values(by='datetime')
