@@ -207,6 +207,8 @@ def check_low_power_period(data, plant_name):
             send_telegram_alert(msg)
 
 # Streamlit app
+st.set_page_config(page_title="Alert Page", layout="centered")
+
 st.title("All Plant Power Output Alert")
 
 # Auto-refresh logic

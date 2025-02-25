@@ -184,6 +184,8 @@ def check_low_power_period(data, plant_name):
             st.warning(msg, icon="⚠️")
 
 # Streamlit app
+st.set_page_config(page_title="All Plant Page", layout="centered")
+
 st.title("All Plant Power Output Visualization")
 
 # Auto-refresh logic
