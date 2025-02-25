@@ -85,6 +85,8 @@ def fetch_plant_data_parallel(token, plant_name, loggers, serials, start_date, e
     return all_results
 
 # Streamlit app
+st.set_page_config(page_title="One Plant Page", layout="centered")
+
 st.title("Plant Power Output Visualization")
 
 # Authenticate and get token

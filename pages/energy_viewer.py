@@ -173,6 +173,8 @@ def fetch_data_wrapper(token, inverters, start_date, end_date):
         raise
 
 # Streamlit app
+st.set_page_config(page_title="Energy Viewer Page", layout="centered")
+
 st.title("Real-Time Power Flow Visualization")
 
 # Auto-refresh logic
