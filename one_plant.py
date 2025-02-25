@@ -40,7 +40,7 @@ def authenticate():
     return None
 
 # Function to fetch data for a logger in parallel
-def fetch_current_date_parallel(token, entityID, plant_name, start_date, end_date,
+def fetch_current_date_parallel(token, entityID, serial, plant_name, start_date, end_date,
                                 data_type="GenerationPower", value_type="average", sample_size="Min15"):
     headers = {
         "X-AuroraVision-Token": token,
@@ -61,24 +61,24 @@ def fetch_current_date_parallel(token, entityID, plant_name, start_date, end_dat
                     utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc)
                     local_time = utc_time.astimezone(gmt_plus_7)
                     datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S')
-                    results.append([epoch, datetime_str, entityID, value, units])
-            return entityID, results
+                    results.append([epoch, datetime_str, serial, value, units])
+            return serial, results
         else:
-            logging.warning(f"Failed to fetch data for {entityID} - Status: {response.status_code}")
-            return entityID, []
+            logging.warning(f"Failed to fetch data for {serial} - Status: {response.status_code}")
+            return serial, []
     except Exception as e:
-        logging.error(f"Error fetching data for {entityID}: {e}")
-        return entityID, []
+        logging.error(f"Error fetching data for {serial}: {e}")
+        return serial, []
 
 # Function to fetch all data for a single plant in parallel
-def fetch_plant_data_parallel(token, plant_name, loggers, start_date, end_date):
+def fetch_plant_data_parallel(token, plant_name, loggers, serials, start_date, end_date):
     all_results = []
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [
             executor.submit(
-                fetch_current_date_parallel, token, logger, plant_name, start_date, end_date
+                fetch_current_date_parallel, token, logger, serial, plant_name, start_date, end_date
             )
-            for logger in loggers
+            for logger, serial in zip(loggers, serials)
         ]
         for future in as_completed(futures):
             all_results.append(future.result())
@@ -97,6 +97,9 @@ token = st.session_state.token
 with open('all_inverters.json', 'r') as f:
     inverters = json.load(f)
 
+with open('all_serial.json', 'r') as f:
+    logids = json.load(f)
+
 plant_names = list(inverters.keys())
 
 # Dropdown for plant selection
@@ -104,17 +107,18 @@ selected_plant = st.selectbox("Select a Plant", plant_names)
 
 if st.button("Fetch and Visualize Data"):
     loggers = inverters.get(selected_plant, [])
+    serials = logids.get(selected_plant, [])
     start_date = datetime.now().strftime("%Y%m%d")
     end_date = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
     # Fetch data for the selected plant in parallel
-    plant_data = fetch_plant_data_parallel(token, selected_plant, loggers, start_date, end_date)
+    plant_data = fetch_plant_data_parallel(token, selected_plant, loggers, serials, start_date, end_date)
 
     # Process and save data
     df = pd.DataFrame()
     for entityID, results in plant_data:
         if results:
-            df_logger = pd.DataFrame(results, columns=["epoch_start", "datetime", "entityID", "value", "units"])
+            df_logger = pd.DataFrame(results, columns=["epoch_start", "datetime", "serial", "value", "units"])
             if not df_logger.empty:
                 df = pd.concat([df, df_logger], ignore_index=True)
 
@@ -148,7 +152,7 @@ if st.button("Fetch and Visualize Data"):
             filtered_data,
             x='datetime',
             y='value',
-            color='entityID',
+            color='serial',
             title=f"{selected_plant} Power Output",
             labels={'datetime': 'Time', 'value': 'Power Output (Watts)'},
             template='plotly_white',

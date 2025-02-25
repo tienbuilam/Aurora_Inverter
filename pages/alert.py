@@ -54,7 +54,7 @@ def authenticate():
     wait=wait_exponential(multiplier=1, min=4, max=10),
     retry=retry_if_exception_type((requests.RequestException, ValueError))
 )
-def fetch_current_date_parallel(token, entityID, plant_name, start_date, end_date,
+def fetch_current_date_parallel(token, entityID, serial, plant_name, start_date, end_date,
                                 data_type="GenerationPower", value_type="average", sample_size="Min15"):
     headers = {
         "X-AuroraVision-Token": token,
@@ -78,29 +78,48 @@ def fetch_current_date_parallel(token, entityID, plant_name, start_date, end_dat
                     utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc)
                     local_time = utc_time.astimezone(gmt_plus_7)
                     datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S')
-                    results.append([epoch, datetime_str, entityID, value, units])
-            return plant_name, entityID, results
+                    results.append([epoch, datetime_str, serial, value, units])
+            return plant_name, serial, results
         else:
-            logging.warning(f"Failed to fetch data for {entityID} - Status: {response.status_code}")
-            return plant_name, entityID, []
+            logging.warning(f"Failed to fetch data for {serial} - Status: {response.status_code}")
+            return plant_name, serial, []
     except Exception as e:
-        logging.error(f"Error fetching data for {entityID}: {e}")
-        return plant_name, entityID, []
+        logging.error(f"Error fetching data for {serial}: {e}")
+        return plant_name, serial, []
 
 # Function to fetch all data in parallel
-def fetch_all_data_parallel(token, inverters, start_date, end_date):
+def fetch_all_data_parallel(token, inverters, serials, start_date, end_date):
     all_results = []
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [
-            executor.submit(
-                fetch_current_date_parallel, token, logger, plant_name, start_date, end_date
-            )
-            for plant_name, loggers in inverters.items()
-            for logger in loggers
-        ]
+        futures = []
+        # Iterate through each plant
+        for plant_name in inverters:
+            # Get corresponding inverters and serials for this plant
+            plant_inverters = inverters.get(plant_name, [])
+            plant_serials = serials.get(plant_name, [])
 
+            # Create futures for each inverter-serial pair
+            for inverter_id, serial in zip(plant_inverters, plant_serials):
+                futures.append(
+                    executor.submit(
+                        fetch_current_date_parallel,  # Your existing function
+                        token,
+                        inverter_id,
+                        serial,
+                        plant_name,
+                        start_date,
+                        end_date
+                    )
+                )
+
+        # Collect results as they complete
         for future in as_completed(futures):
-            all_results.append(future.result())
+            try:
+                result = future.result()
+                if result:
+                    all_results.append(result)
+            except Exception as e:
+                print(f"Error processing future: {str(e)}")
 
     return all_results
 
@@ -109,7 +128,7 @@ def fetch_all_data_parallel(token, inverters, start_date, end_date):
     wait=wait_exponential(multiplier=1, min=4, max=10),
     retry=retry_if_exception_type((requests.RequestException, ValueError))
 )
-def fetch_data_wrapper(token, inverters, start_date, end_date):
+def fetch_data_wrapper(token, inverters, serials, start_date, end_date):
     """Wrapper for data fetching with retry mechanism"""
     try:
         # Verify and refresh token if needed
@@ -118,7 +137,7 @@ def fetch_data_wrapper(token, inverters, start_date, end_date):
             token = authenticate()
             st.session_state.token = token
             
-        return fetch_all_data_parallel(token, inverters, start_date, end_date)
+        return fetch_all_data_parallel(token, inverters, serials, start_date, end_date)
     except Exception as e:
         logger.error(f"Error in fetch_data_wrapper: {str(e)}")
         raise
@@ -152,8 +171,8 @@ def check_inverter_time(data, plant_name):
     timestamp_obj = time.tz_localize('Asia/Bangkok')  # Ensure the Timestamp is localized to GMT+7
 
     if datetime_obj - timedelta(minutes=30) > timestamp_obj:
-        inverter_id = data['entityID'].iloc[0]
-        msg = f"{plant_name}, inverter {inverter_id} outdated.\nLast update: {timestamp_obj.strftime('%Y-%m-%d %H:%M')}"
+        serial_id = data['serial'].iloc[0]
+        msg = f"{plant_name}, inverter {serial_id} outdated.\nLast update: {timestamp_obj.strftime('%Y-%m-%d %H:%M')}"
         st.warning(msg, icon="⚠️")
         send_telegram_alert(msg)
         return False
@@ -163,27 +182,27 @@ def check_inverter_time(data, plant_name):
 def compare_latest_inverter_power(data, plant_name):    
     time = data[data['value'].notnull()]['datetime'].iloc[-1]
     data = data[data['datetime'] == time].sort_values(by='value', ascending=False)
-    inverter_ids = data['entityID'].unique()
+    serial_ids = data['serial'].unique()
     if data['value'].iloc[0] > 50:
-        for i in range(1, len(inverter_ids)):
+        for i in range(1, len(serial_ids)):
             if data['value'].iloc[i] < data['value'].iloc[0] * 0.25:
-                msg = f"{plant_name}, inverter {inverter_ids[i]} is underperforming with {round(data['value'].iloc[i], 2)} kW.\nTime: {time.strftime('%Y-%m-%d %H:%M')}"
+                msg = f"{plant_name}, inverter {serial_ids[i]} is underperforming with {round(data['value'].iloc[i], 2)} kW.\nTime: {time.strftime('%Y-%m-%d %H:%M')}"
                 st.warning(msg, icon="⚠️")
                 send_telegram_alert(msg)
     else:
         return None
 
 def check_low_power_period(data, plant_name):
-    inverter_id = data['entityID'].iloc[0]
+    serial_id = data['serial'].iloc[0]
     time = data[data['value'].notnull()]['datetime']
     value = data[data['value'].notnull()]['value']
     if value.iloc[-1] < 5000 and value.size > 3:
         if value.iloc[-2] < 5000 and value.iloc[-3] < 5000:
-            msg = f"{plant_name}, inverter {inverter_id} detects low power.\nFrom {time.iloc[-3].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
+            msg = f"{plant_name}, inverter {serial_id} detects low power.\nFrom {time.iloc[-3].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
             st.warning(msg, icon="⚠️")
             send_telegram_alert(msg)
         elif value.iloc[-2] > 50000:
-            msg = f"{plant_name}, inverter {inverter_id} detects high power drop.\nFrom {time.iloc[-2].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
+            msg = f"{plant_name}, inverter {serial_id} detects high power drop.\nFrom {time.iloc[-2].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
             st.warning(msg, icon="⚠️")
             send_telegram_alert(msg)
 
@@ -206,12 +225,15 @@ st.write("Notification will be sent if any issues are detected from 8am to 17pm.
 with open('all_inverters.json', 'r') as f:
     inverters = json.load(f)
 
+with open('all_serial.json', 'r') as f:
+    serials = json.load(f)
+
 # Set date range
 start_date = datetime.now().strftime("%Y%m%d")
 end_date = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
 # Fetch data in parallel
-all_data = fetch_all_data_parallel(token, inverters, start_date, end_date)
+all_data = fetch_all_data_parallel(token, inverters, serials, start_date, end_date)
 
 # Process and save data
 for plant_name, entityID, results in all_data:
@@ -221,17 +243,17 @@ for plant_name, entityID, results in all_data:
         filename = os.path.join(folder_path, f"{entityID}.csv")
         with open(filename, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(["epoch_start", "datetime", "entityID", "value", "units"])
+            writer.writerow(["epoch_start", "datetime", "serial", "value", "units"])
             writer.writerows(results)
 
 st.success("Data fetching completed. Errors will be displayed below.")
 
 # Generate graphs for each plant
-for plant_name, loggers in inverters.items():
+for plant_name, serials in serials.items():
     df = pd.DataFrame()
     drop = []
-    for logger in loggers:
-        filename = f"temp/{plant_name}/{logger}.csv"
+    for serial in serials:
+        filename = f"temp/{plant_name}/{serial}.csv"
         if os.path.exists(filename):
             df_logger = pd.read_csv(filename)
             if df_logger['value'].notnull().any():
@@ -239,11 +261,11 @@ for plant_name, loggers in inverters.items():
                     check_low_power_period(df_logger, plant_name)
                 df = pd.concat([df, df_logger], ignore_index=True)
             else:
-                drop.append([plant_name, logger])
+                drop.append([plant_name, serial])
 
     if not df.empty:
-        for plant_name, logger in drop:
-            msg = f"{plant_name}, inverter {logger} is deactivated."
+        for plant_name, serial in drop:
+            msg = f"{plant_name}, inverter {serial} is deactivated."
             st.warning(msg, icon="⚠️")
             send_telegram_alert(msg)
         filtered_data = df.dropna(subset=['value']).copy()
