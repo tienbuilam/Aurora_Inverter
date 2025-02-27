@@ -24,6 +24,38 @@ BASE_URL = st.secrets["aurora"]["base_url"]
 
 gmt_plus_7 = pytz.timezone('Asia/Bangkok')
 
+# Message tracking system
+MESSAGE_HISTORY_FILE = "message_history.json"
+
+def load_message_history():
+    """Load message history from file"""
+    if os.path.exists(MESSAGE_HISTORY_FILE):
+        try:
+            with open(MESSAGE_HISTORY_FILE, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logging.error(f"Error loading message history: {e}")
+            return {}
+    return {}
+
+def save_message_history(history):
+    """Save message history to file"""
+    try:
+        with open(MESSAGE_HISTORY_FILE, 'w') as f:
+            json.dump(history, f)
+    except Exception as e:
+        logging.error(f"Error saving message history: {e}")
+
+def clean_old_messages(history):
+    """Remove messages older than 15 minutes"""
+    current_time = datetime.now(gmt_plus_7).timestamp()
+    cutoff_time = current_time - (15 * 60)  # 15 minutes ago
+    
+    return {
+        key: value for key, value in history.items() 
+        if value.get('timestamp', 0) > cutoff_time
+    }
+
 # Function to authenticate
 def authenticate():
     url = f"{BASE_URL}/authenticate"
@@ -142,8 +174,61 @@ def fetch_data_wrapper(token, inverters, serials, start_date, end_date):
         logger.error(f"Error in fetch_data_wrapper: {str(e)}")
         raise
 
-def send_telegram_alert(message):
+def verify_token(token):
+    """Placeholder for token verification function"""
+    # Add your token verification logic here
+    return True if token else False
+
+def send_telegram_alert(message, issue_id, issue_details=None):
+    """
+    Send alert to Telegram with tracking to avoid duplicates
+    
+    Parameters:
+    - message: The alert message to send
+    - issue_id: Unique identifier for this specific issue (e.g., "plant_name_inverter_id_issue_type")
+    - issue_details: Additional details about the issue for comparison
+    
+    Returns:
+    - True if message was sent, False otherwise
+    """
     if 8 <= datetime.now(gmt_plus_7).hour <= 16:
+        # Load message history
+        message_history = load_message_history()
+        
+        # Clean old messages first
+        message_history = clean_old_messages(message_history)
+        
+        current_time = datetime.now(gmt_plus_7).timestamp()
+        
+        # Check if this issue already exists in history
+        if issue_id in message_history:
+            last_sent_time = message_history[issue_id].get('timestamp', 0)
+            last_details = message_history[issue_id].get('details', '')
+            
+            # If the same issue was sent less than 15 minutes ago, don't send again
+            if current_time - last_sent_time < 15 * 60:
+                # If the details are the same, don't send
+                if last_details == issue_details:
+                    return False
+            
+            # If it's been more than 15 minutes or details changed, update and send
+            message_history[issue_id] = {
+                'timestamp': current_time,
+                'details': issue_details,
+                'message': message
+            }
+        else:
+            # New issue, add to history
+            message_history[issue_id] = {
+                'timestamp': current_time,
+                'details': issue_details,
+                'message': message
+            }
+        
+        # Save updated history
+        save_message_history(message_history)
+        
+        # Send the message
         try:
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
             
@@ -162,49 +247,125 @@ def send_telegram_alert(message):
         return False
 
 def check_inverter_time(data, plant_name):
+    """Check if inverter data is outdated"""
     data['datetime'] = pd.to_datetime(data['datetime'])
     time = data[data['value'].notnull()]['datetime'].iloc[-1]
     datetime_obj = datetime.now(gmt_plus_7)
 
     # Ensure both have the same timezone (GMT+7)
-    datetime_obj = datetime_obj.astimezone(pytz.timezone('Asia/Bangkok'))  # Convert datetime to GMT+7
-    timestamp_obj = time.tz_localize('Asia/Bangkok')  # Ensure the Timestamp is localized to GMT+7
+    datetime_obj = datetime_obj.astimezone(pytz.timezone('Asia/Bangkok'))
+    timestamp_obj = time.tz_localize('Asia/Bangkok')
 
+    serial_id = data['serial'].iloc[0]
+    issue_id = f"{plant_name}_{serial_id}_outdated"
+    
     if datetime_obj - timedelta(minutes=30) > timestamp_obj:
-        serial_id = data['serial'].iloc[0]
-        msg = f"{plant_name}, inverter {serial_id} outdated.\nLast update: {timestamp_obj.strftime('%Y-%m-%d %H:%M')}"
+        timestamp_str = timestamp_obj.strftime('%Y-%m-%d %H:%M')
+        msg = f"{plant_name}, inverter {serial_id} outdated.\nLast update: {timestamp_str}"
+        details = f"last_update:{timestamp_str}"
+        
         st.warning(msg, icon="⚠️")
-        send_telegram_alert(msg)
+        send_telegram_alert(msg, issue_id, details)
         return False
     else:
+        # Check if we need to send a resolution message
+        message_history = load_message_history()
+        issue_id = f"{plant_name}_{serial_id}_outdated"
+        
+        if issue_id in message_history:
+            # Issue is now resolved
+            resolution_msg = f"{plant_name}, inverter {serial_id} is now up-to-date."
+            resolution_id = f"{issue_id}_resolved"
+            send_telegram_alert(resolution_msg, resolution_id)
+            
+            # Remove the issue from history
+            message_history.pop(issue_id, None)
+            save_message_history(message_history)
+            
         return True
 
-def compare_latest_inverter_power(data, plant_name):    
+def compare_latest_inverter_power(data, plant_name):
+    """Compare power output of inverters"""
     time = data[data['value'].notnull()]['datetime'].iloc[-1]
     data = data[data['datetime'] == time].sort_values(by='value', ascending=False)
     serial_ids = data['serial'].unique()
+    
     if data['value'].iloc[0] > 50:
         for i in range(1, len(serial_ids)):
+            underperforming_serial = serial_ids[i]
+            issue_id = f"{plant_name}_{underperforming_serial}_underperforming"
+            
             if data['value'].iloc[i] < data['value'].iloc[0] * 0.25:
-                msg = f"{plant_name}, inverter {serial_ids[i]} is underperforming with {round(data['value'].iloc[i], 2)} kW.\nTime: {time.strftime('%Y-%m-%d %H:%M')}"
+                current_value = round(data['value'].iloc[i], 2)
+                time_str = time.strftime('%Y-%m-%d %H:%M')
+                msg = f"{plant_name}, inverter {underperforming_serial} is underperforming with {current_value} kW.\nTime: {time_str}"
+                details = f"value:{current_value},time:{time_str}"
+                
                 st.warning(msg, icon="⚠️")
-                send_telegram_alert(msg)
+                send_telegram_alert(msg, issue_id, details)
+            else:
+                # Check if we need to send a resolution message
+                message_history = load_message_history()
+                if issue_id in message_history:
+                    # Issue is now resolved
+                    current_value = round(data['value'].iloc[i], 2)
+                    resolution_msg = f"{plant_name}, inverter {underperforming_serial} is now performing normally at {current_value} kW."
+                    resolution_id = f"{issue_id}_resolved"
+                    send_telegram_alert(resolution_msg, resolution_id)
+                    
+                    # Remove the issue from history
+                    message_history.pop(issue_id, None)
+                    save_message_history(message_history)
     else:
         return None
 
 def check_low_power_period(data, plant_name):
+    """Check for low power output and high power drop"""
     serial_id = data['serial'].iloc[0]
     time = data[data['value'].notnull()]['datetime']
     value = data[data['value'].notnull()]['value']
+    
     if value.iloc[-1] < 5000 and value.size > 3:
         if value.iloc[-2] < 5000 and value.iloc[-3] < 5000:
-            msg = f"{plant_name}, inverter {serial_id} detects low power.\nFrom {time.iloc[-3].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
+            start_time = time.iloc[-3].strftime('%Y-%m-%d %H:%M')
+            end_time = time.iloc[-1].strftime('%Y-%m-%d %H:%M')
+            issue_id = f"{plant_name}_{serial_id}_low_power"
+            details = f"start:{start_time},end:{end_time},value:{value.iloc[-1]}"
+            
+            msg = f"{plant_name}, inverter {serial_id} detects low power.\nFrom {start_time} to {end_time}"
             st.warning(msg, icon="⚠️")
-            send_telegram_alert(msg)
+            send_telegram_alert(msg, issue_id, details)
         elif value.iloc[-2] > 50000:
-            msg = f"{plant_name}, inverter {serial_id} detects high power drop.\nFrom {time.iloc[-2].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
+            start_time = time.iloc[-2].strftime('%Y-%m-%d %H:%M')
+            end_time = time.iloc[-1].strftime('%Y-%m-%d %H:%M')
+            issue_id = f"{plant_name}_{serial_id}_power_drop"
+            details = f"start:{start_time},end:{end_time},from:{value.iloc[-2]},to:{value.iloc[-1]}"
+            
+            msg = f"{plant_name}, inverter {serial_id} detects high power drop.\nFrom {start_time} to {end_time}"
             st.warning(msg, icon="⚠️")
-            send_telegram_alert(msg)
+            send_telegram_alert(msg, issue_id, details)
+    else:
+        # Check if we need to send resolution messages
+        message_history = load_message_history()
+        low_power_id = f"{plant_name}_{serial_id}_low_power"
+        power_drop_id = f"{plant_name}_{serial_id}_power_drop"
+        
+        issues_resolved = []
+        if low_power_id in message_history:
+            issues_resolved.append((low_power_id, "low power"))
+        if power_drop_id in message_history:
+            issues_resolved.append((power_drop_id, "power drop"))
+            
+        for issue_id, issue_type in issues_resolved:
+            resolution_msg = f"{plant_name}, inverter {serial_id} has recovered from {issue_type}. Current value: {round(value.iloc[-1]/1000, 2)} kW"
+            resolution_id = f"{issue_id}_resolved"
+            send_telegram_alert(resolution_msg, resolution_id)
+            
+            # Remove the issue from history
+            message_history.pop(issue_id, None)
+            
+        if issues_resolved:
+            save_message_history(message_history)
 
 # Streamlit app
 st.set_page_config(page_title="Alert Page", layout="centered")
@@ -221,7 +382,7 @@ if "token" not in st.session_state:
 
 token = st.session_state.token
 
-st.write("Notification will be sent if any issues are detected from 8am to 17pm.")
+st.write("Notification will be sent if any issues are detected from 8am to 5pm.")
 
 # Load inverters from file
 with open('all_inverters.json', 'r') as f:
@@ -266,10 +427,12 @@ for plant_name, serials in serials.items():
                 drop.append([plant_name, serial])
 
     if not df.empty:
-        for plant_name, serial in drop:
+        for plant_name, serial in drop:  # Check for deactivated inverters
+            issue_id = f"{plant_name}_{serial}_deactivated"
             msg = f"{plant_name}, inverter {serial} is deactivated."
             st.warning(msg, icon="⚠️")
-            send_telegram_alert(msg)
+            send_telegram_alert(msg, issue_id, "deactivated")
+            
         filtered_data = df.dropna(subset=['value']).copy()
         filtered_data['datetime'] = pd.to_datetime(filtered_data['datetime'])
         filtered_data = filtered_data.sort_values(by='datetime')
@@ -291,3 +454,9 @@ for plant_name, serials in serials.items():
                 entity = entityID     
     else:
         continue
+
+# Add cleanup job at the end of the script to remove old messages
+# This ensures that issues that no longer appear will be removed
+message_history = load_message_history()
+message_history = clean_old_messages(message_history)
+save_message_history(message_history)
