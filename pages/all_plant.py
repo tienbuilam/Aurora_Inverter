@@ -143,44 +143,59 @@ def fetch_data_wrapper(token, inverters, serials, start_date, end_date):
         raise
 
 def check_inverter_time(data, plant_name):
+    """Check if inverter data is outdated"""
     data['datetime'] = pd.to_datetime(data['datetime'])
     time = data[data['value'].notnull()]['datetime'].iloc[-1]
     datetime_obj = datetime.now(gmt_plus_7)
 
     # Ensure both have the same timezone (GMT+7)
-    datetime_obj = datetime_obj.astimezone(pytz.timezone('Asia/Bangkok'))  # Convert datetime to GMT+7
-    timestamp_obj = time.tz_localize('Asia/Bangkok')  # Ensure the Timestamp is localized to GMT+7
+    datetime_obj = datetime_obj.astimezone(pytz.timezone('Asia/Bangkok'))
+    timestamp_obj = time.tz_localize('Asia/Bangkok')
 
+    serial_id = data['serial'].iloc[0]
+    
     if datetime_obj - timedelta(minutes=30) > timestamp_obj:
-        serial_id = data['serial'].iloc[0]
-        msg = f"{plant_name}, inverter {serial_id} outdated.\nLast update: {timestamp_obj.strftime('%Y-%m-%d %H:%M')}"
+        timestamp_str = timestamp_obj.strftime('%Y-%m-%d %H:%M')
+        msg = f"{plant_name}, inverter {serial_id} outdated.\nLast update: {timestamp_str}"
         st.warning(msg, icon="⚠️")
         return False
     else:
         return True
 
-def compare_latest_inverter_power(data, plant_name):    
+def compare_latest_inverter_power(data, plant_name):
+    """Compare power output of inverters"""
     time = data[data['value'].notnull()]['datetime'].iloc[-1]
     data = data[data['datetime'] == time].sort_values(by='value', ascending=False)
     serial_ids = data['serial'].unique()
+    
     if data['value'].iloc[0] > 50:
         for i in range(1, len(serial_ids)):
+            underperforming_serial = serial_ids[i]
+            
             if data['value'].iloc[i] < data['value'].iloc[0] * 0.25:
-                msg = f"{plant_name}, inverter {serial_ids[i]} is underperforming with {round(data['value'].iloc[i], 2)} kW.\nTime: {time.strftime('%Y-%m-%d %H:%M')}"
+                current_value = round(data['value'].iloc[i], 2)
+                time_str = time.strftime('%Y-%m-%d %H:%M')
+                msg = f"{plant_name}, inverter {underperforming_serial} is underperforming with {current_value} kW.\nTime: {time_str}"
                 st.warning(msg, icon="⚠️")
     else:
         return None
 
 def check_low_power_period(data, plant_name):
+    """Check for low power output and high power drop"""
     serial_id = data['serial'].iloc[0]
     time = data[data['value'].notnull()]['datetime']
     value = data[data['value'].notnull()]['value']
+    
     if value.iloc[-1] < 5000 and value.size > 3:
         if value.iloc[-2] < 5000 and value.iloc[-3] < 5000:
-            msg = f"{plant_name}, inverter {serial_id} detects low power.\nFrom {time.iloc[-3].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
+            start_time = time.iloc[-3].strftime('%Y-%m-%d %H:%M')
+            end_time = time.iloc[-1].strftime('%Y-%m-%d %H:%M')
+            msg = f"{plant_name}, inverter {serial_id} detects low power.\nFrom {start_time} to {end_time}"
             st.warning(msg, icon="⚠️")
         elif value.iloc[-2] > 50000:
-            msg = f"{plant_name}, inverter {serial_id} detects high power drop.\nFrom {time.iloc[-2].strftime('%Y-%m-%d %H:%M')} to {time.iloc[-1].strftime('%Y-%m-%d %H:%M')}"
+            start_time = time.iloc[-2].strftime('%Y-%m-%d %H:%M')
+            end_time = time.iloc[-1].strftime('%Y-%m-%d %H:%M')         
+            msg = f"{plant_name}, inverter {serial_id} detects high power drop.\nFrom {start_time} to {end_time}"
             st.warning(msg, icon="⚠️")
 
 # Streamlit app
@@ -230,7 +245,7 @@ st.success("Data fetching completed. Generating graphs...")
 # Generate graphs for each plant
 for plant_name, serials in serials.items():
     df = pd.DataFrame()
-    drop = []
+    drop = [] # list of deactivated inverters
     for serial in serials:
         filename = f"temp/{plant_name}/{serial}.csv"
         if os.path.exists(filename):
@@ -243,7 +258,7 @@ for plant_name, serials in serials.items():
                 drop.append([plant_name, serial])
 
     if not df.empty:
-        for plant_name, serial in drop:
+        for plant_name, serial in drop: # Check for deactivated inverters
             msg = f"{plant_name}, inverter {serial} is deactivated."
             st.warning(msg, icon="⚠️")
         filtered_data = df.dropna(subset=['value']).copy()

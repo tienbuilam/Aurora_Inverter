@@ -245,7 +245,6 @@ for plant, entityID in plants.items():
         current_date = datetime.now(gmt_plus_7).date()
 
         # Create the figure
-        # Create the figure
         fig = go.Figure()
 
         # Common parameters
