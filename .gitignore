@@ -161,3 +161,4 @@ cython_debug/
 
 temp/
 .streamlit/secrets.toml
+message_history.json

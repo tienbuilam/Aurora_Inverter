@@ -179,7 +179,7 @@ st.title("Real-Time Power Flow Visualization")
 
 # Auto-refresh logic
 if 8 <= datetime.now(gmt_plus_7).hour <= 17:
-    st_autorefresh(interval=600_000, key="auto_refresh")
+    st_autorefresh(interval=840_000, key="auto_refresh")
 
 # Authenticate and get token
 if "token" not in st.session_state:
@@ -251,7 +251,7 @@ for plant, entityID in plants.items():
         area_kwargs = {
             'line': dict(width=0),
             'stackgroup': 'source',
-            'hovertemplate': '%{y:.2f} kW'
+            'hovertemplate':'%{y:.2f} kW'
         }
 
         fig.add_trace(go.Scatter(
