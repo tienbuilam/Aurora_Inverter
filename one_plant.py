@@ -121,7 +121,7 @@ if st.button("Fetch and Visualize Data"):
     for entityID, results in plant_data:
         if results:
             df_logger = pd.DataFrame(results, columns=["epoch_start", "datetime", "serial", "value", "units"])
-            if not df_logger.empty:
+            if df_logger['value'].notnull().any():
                 df = pd.concat([df, df_logger], ignore_index=True)
 
     if not df.empty:
@@ -135,6 +135,7 @@ if st.button("Fetch and Visualize Data"):
         time_diff = filtered_data['datetime'].diff().dt.total_seconds()
         threshold = 15 * 60
         filtered_data.loc[time_diff > threshold, 'value'] = None
+        filtered_data['value'] = filtered_data['value'] / 1000  # Convert to kW
 
         with open('all_plants.json', 'r') as f:
             plants = json.load(f)
@@ -159,8 +160,22 @@ if st.button("Fetch and Visualize Data"):
             labels={'datetime': 'Time', 'value': 'Power Output (Watts)'},
             template='plotly_white',
         )
-        fig.update_yaxes(range=[0, 100000], title="Power Output (Watts)")
-        fig.update_traces(mode='lines+markers')
+        # Set x-axis range to full day
+        current_date = datetime.now(gmt_plus_7).date()
+        start_time = gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("06:00", "%H:%M").time()))
+        end_time = gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("18:00", "%H:%M").time()))
+
+        fig.update_xaxes(
+            range=[start_time, end_time],
+            tickformat="%H:%M",
+            dtick=3600000*2, # Show tick every 2 hours (in milliseconds)
+            title="Time (Hours)"
+        )
+
+        fig.update_yaxes(range=[0, 100], title="Power Output (kW)")
+        fig.update_traces(hovertemplate='%{x} <br> Power: %{y:.2f} kW', mode='lines+markers')
+
         st.plotly_chart(fig, use_container_width=True)
+        
     else:
         st.warning(f"No data available for {selected_plant}.")

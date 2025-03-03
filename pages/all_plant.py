@@ -205,7 +205,7 @@ st.title("All Plant Power Output Visualization")
 
 # Auto-refresh logic
 if 8 <= datetime.now(gmt_plus_7).hour <= 16:
-    st_autorefresh(interval=600_000, key="auto_refresh")
+    st_autorefresh(interval=840_000, key="auto_refresh")
 
 # Authenticate and get token
 if "token" not in st.session_state:

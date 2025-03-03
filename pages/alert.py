@@ -357,10 +357,6 @@ def check_low_power_period(data, plant_name):
             issues_resolved.append((power_drop_id, "power drop"))
             
         for issue_id, issue_type in issues_resolved:
-            resolution_msg = f"{plant_name}, inverter {serial_id} has recovered from {issue_type}. Current value: {round(value.iloc[-1]/1000, 2)} kW"
-            resolution_id = f"{issue_id}_resolved"
-            send_telegram_alert(resolution_msg, resolution_id)
-            
             # Remove the issue from history
             message_history.pop(issue_id, None)
             
@@ -374,7 +370,7 @@ st.title("All Plant Power Output Alert")
 
 # Auto-refresh logic
 if 8 <= datetime.now(gmt_plus_7).hour <= 16:
-    st_autorefresh(interval=600_000, key="auto_refresh")
+    st_autorefresh(interval=840_000, key="auto_refresh")
 
 # Authenticate and get token
 if "token" not in st.session_state:
