@@ -138,7 +138,8 @@ def fetch_grid_power_export(token, entityID, plant_name, start_date, end_date,
             writer = csv.writer(file)
             for entry in data.get('result', []):
                 epoch = entry.get('start')
-                value = entry.get('value', '')  # Handle missing values gracefully
+                raw_value = entry.get('value', '')  # Handle missing values gracefully
+                value = float(raw_value) if raw_value else None
                 units = entry.get('units', '')
 
                 # Convert epoch to readable datetime in GMT+7
@@ -171,6 +172,19 @@ def fetch_data_wrapper(token, inverters, start_date, end_date):
     except Exception as e:
         logger.error(f"Error in fetch_data_wrapper: {str(e)}")
         raise
+
+def check_ppa(data, plant_name):
+    df = pd.read_csv('inverter.csv')
+    df.drop(columns=['PPA'], inplace=True)
+    names = df['Plant Name'].values
+    ppas = df['PPAx0.8'].values
+
+    for name, ppa in zip(names, ppas):
+        if (name == plant_name) & (ppa != None):
+            if data['Solar-toGrid'].iloc[-1] > ppa:
+                st.warning(f"Plant {name} has exceeded the PPA limit of {ppa.round(2)} kWh. Current value: {data['Solar-toGrid'].iloc[-1].round(2)} kWh", icon="⚠️")
+                return True
+            return False
 
 # Streamlit app
 st.set_page_config(page_title="Energy Viewer Page", layout="centered")
@@ -241,6 +255,8 @@ for plant, entityID in plants.items():
 
         # Convert datetime to datetime type if it's string
         valid_data['datetime'] = pd.to_datetime(valid_data['datetime'])
+
+        check_ppa(valid_data, plant)
 
         current_date = datetime.now(gmt_plus_7).date()
 
