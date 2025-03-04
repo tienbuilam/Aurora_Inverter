@@ -214,11 +214,17 @@ plant_names = list(inverters.keys())
 # Dropdown for plant selection
 selected_plant = st.selectbox("Select a Plant", plant_names)
 
+# Generate date options for last 7 days (including today)
+date_options = [(datetime.now() - timedelta(days=i)).date() for i in range(6, -1, -1)]
+selected_date = st.selectbox("Select Date", date_options, format_func=lambda d: d.strftime("%Y-%m-%d"))
+
+# Convert selected date to API format
+start_date = selected_date.strftime("%Y%m%d")
+end_date = (selected_date + timedelta(days=1)).strftime("%Y%m%d")
+
 if st.button("Fetch and Visualize Data"):
     loggers = inverters.get(selected_plant, [])
     serials = logids.get(selected_plant, [])
-    start_date = datetime.now().strftime("%Y%m%d")
-    end_date = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
     # Fetch data for the selected plant in parallel
     plant_data = fetch_plant_data_parallel(token, selected_plant, loggers, serials, start_date, end_date)
@@ -284,7 +290,7 @@ if st.button("Fetch and Visualize Data"):
             template='plotly_white',
         )
         # Set x-axis range to full day
-        current_date = datetime.now(gmt_plus_7).date()
+        current_date = selected_date
         start_time = gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("06:00", "%H:%M").time()))
         end_time = gmt_plus_7.localize(datetime.combine(current_date, datetime.strptime("18:00", "%H:%M").time()))
 
@@ -317,7 +323,7 @@ if st.button("Fetch and Visualize Data"):
         # Convert datetime to datetime type if it's string
         valid_data['datetime'] = pd.to_datetime(valid_data['datetime'])
 
-        current_date = datetime.now(gmt_plus_7).date()
+        current_date = selected_date
 
         # Create the figure
         fig = go.Figure()
