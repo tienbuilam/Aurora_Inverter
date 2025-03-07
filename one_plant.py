@@ -59,10 +59,10 @@ def fetch_current_date_parallel(token, entityID, serial, plant_name, start_date,
                 value = entry.get('value', '')
                 units = entry.get('units', '')
                 if epoch:
-                    utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc)
-                    local_time = utc_time.astimezone(gmt_plus_7)
-                    datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S')
-                    results.append([epoch, datetime_str, serial, value, units])
+                    utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc) # from timestamp to datetime
+                    local_time = utc_time.astimezone(gmt_plus_7) # from UTC to GMT+7
+                    datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S') # from datetime to string
+                    results.append([epoch, datetime_str, serial, value, units]) 
             return serial, results
         else:
             logging.warning(f"Failed to fetch data for {plant_name} - Status: {response.status_code}")
@@ -106,9 +106,9 @@ def fetch_grid_power_export(token, entityID, plant_name, start_date, end_date,
 
                 # Convert epoch to readable datetime in GMT+7
                 if epoch:
-                    utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc)
-                    local_time = utc_time.astimezone(gmt_plus_7)
-                    datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S')
+                    utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc) # from timestamp to datetime
+                    local_time = utc_time.astimezone(gmt_plus_7) # from UTC to GMT+7
+                    datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S') # from datetime to string
                     results.append([epoch, datetime_str, value, units])
             return results
         else:
@@ -238,12 +238,12 @@ if st.button("Fetch and Visualize Data"):
     grid_df = pd.DataFrame(grid_df, columns=["epoch_start", "datetime", "value", "units"])
 
     merged_df = pd.merge(
-            power_df[['epoch_start', 'datetime', 'value']],
-            grid_df[['epoch_start', 'value']],
-            on='epoch_start',
-            suffixes=('_power', '_grid'),
-            how='outer'
-        )
+        power_df[['epoch_start', 'datetime', 'value']],
+        grid_df[['epoch_start', 'value']],
+        on='epoch_start',
+        suffixes=('_power', '_grid'),
+        how='outer'
+    )
     valid_data = merged_df.dropna(subset=['value_power', 'value_grid']).copy()
     # Process and save data
     df = pd.DataFrame()
@@ -305,7 +305,7 @@ if st.button("Fetch and Visualize Data"):
         fig.update_traces(hovertemplate='%{x} <br> Power: %{y:.2f} kW', mode='lines+markers')
 
         st.plotly_chart(fig, use_container_width=True)
-        
+
     if not valid_data.empty:
         # st.markdown(f"### [{plant} Energy Balance](https://www.auroravision.net/dashboard/#{entityID})")
         # Get latest synchronized data point
