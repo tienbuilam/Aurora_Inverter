@@ -26,7 +26,6 @@ class SolarMonitoringApp:
         
         # Authentication
         self.token = None
-        self.authenticate()
 
     def load_configurations(self):
         """Load configuration files"""
@@ -278,10 +277,10 @@ class SolarMonitoringApp:
             
             # Send the message
             try:
-                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                url = f"https://api.telegram.org/bot{self.BOT_TOKEN}/sendMessage"
                 
                 payload = {
-                    "chat_id": CHAT_ID,
+                    "chat_id": self.CHAT_ID,
                     "text": message,
                     "parse_mode": "HTML"
                 }
@@ -444,7 +443,7 @@ class SolarMonitoringApp:
         """Main application runner"""
         st.set_page_config(page_title="Solar Plant Alert", layout="centered")
         st.title("Solar Plant Power Output Alert")
-
+        self.authenticate()
         # Apply auto-refresh timer
         self.auto_refresh_timer()
 

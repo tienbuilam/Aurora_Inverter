@@ -26,7 +26,6 @@ class SolarMonitoringApp:
         
         # Authentication
         self.token = None
-        self.authenticate()
 
     def load_configurations(self):
         """Load configuration files"""
@@ -307,7 +306,7 @@ class SolarMonitoringApp:
         """Main application runner"""
         st.set_page_config(page_title="Energy Viewer", layout="centered")
         st.title("Solar Plant Power Flow Visualization")
-
+        self.authenticate()
         # Apply auto-refresh timer
         self.auto_refresh_timer()
 

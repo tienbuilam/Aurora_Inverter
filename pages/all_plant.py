@@ -26,7 +26,6 @@ class SolarMonitoringApp:
         
         # Authentication
         self.token = None
-        self.authenticate()
 
     def check_inverter_time(self, data, plant_name):
         """Check if inverter data is outdated"""
@@ -325,6 +324,8 @@ class SolarMonitoringApp:
         """Main application runner"""
         st.set_page_config(page_title="Solar Plant Monitoring", layout="centered")
         st.title("Solar Plant Power Output Visualization")
+
+        self.authenticate()
 
         # Apply auto-refresh timer
         self.auto_refresh_timer()
