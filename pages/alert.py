@@ -45,6 +45,11 @@ class SolarMonitoringApp:
             self.MESSAGE_HISTORY_FILE = "message_history.json"
             self.BOT_TOKEN = st.secrets["telegram"]["bot_token"]
             self.CHAT_ID = st.secrets["telegram"]["chat_id"]
+            self.CHAT_ID_TNBD = st.secrets["telegram"]["chat_id_tnbd"]
+            self.CHAT_ID_LA = st.secrets["telegram"]["chat_id_la"]
+            self.CHAT_ID_DN = st.secrets["telegram"]["chat_id_dn"]
+            self.CHAT_ID_MT = st.secrets["telegram"]["chat_id_mt"]
+
             self.API_KEY = st.secrets["aurora"]["api_key"]
             self.USERNAME = st.secrets["aurora"]["username"]
             self.PASSWORD = st.secrets["aurora"]["password"]
@@ -124,11 +129,14 @@ class SolarMonitoringApp:
         
         if datetime_obj - timedelta(minutes=30) > timestamp_obj:
             timestamp_str = timestamp_obj.strftime('%Y-%m-%d %H:%M')
-            msg = f"{plant_name}, inverter {serial_id} outdated.\nLast update: {timestamp_str}"
+            # Bold for Streamlit warning
+            st_msg = f"**{plant_name}**, inverter **{serial_id}** outdated.\nLast update: {timestamp_str}"
+            # Bold for Telegram (HTML)
+            tg_msg = f"<b>{plant_name}</b>, inverter <b>{serial_id}</b> outdated.\nLast update: {timestamp_str}"
             details = f"last_update:{timestamp_str}"
             
-            st.warning(msg, icon="⚠️")
-            self.send_telegram_alert(msg, issue_id, details)
+            st.warning(st_msg, icon="⚠️")
+            self.send_telegram_alert(tg_msg, issue_id, details)
             return False
         else:
             # Check if we need to send a resolution message
@@ -137,7 +145,8 @@ class SolarMonitoringApp:
             
             if issue_id in message_history:
                 # Issue is now resolved
-                resolution_msg = f"{plant_name}, inverter {serial_id} is now up-to-date."
+                # Bold for Telegram (HTML)
+                resolution_msg = f"<b>{plant_name}</b>, inverter <b>{serial_id}</b> is now up-to-date."
                 resolution_id = f"{issue_id}_resolved"
                 self.send_telegram_alert(resolution_msg, resolution_id)
                 
@@ -161,18 +170,22 @@ class SolarMonitoringApp:
                 if data['value'].iloc[i] < data['value'].iloc[0] * 0.25:
                     current_value = round(data['value'].iloc[i], 2)
                     time_str = time.strftime('%Y-%m-%d %H:%M')
-                    msg = f"{plant_name}, inverter {underperforming_serial} is underperforming with {current_value} kW.\nTime: {time_str}"
+                    # Bold for Streamlit warning
+                    st_msg = f"**{plant_name}**, inverter **{underperforming_serial}** is underperforming with {current_value} kW.\nTime: {time_str}"
+                    # Bold for Telegram (HTML)
+                    tg_msg = f"<b>{plant_name}</b>, inverter <b>{underperforming_serial}</b> is underperforming with {current_value} kW.\nTime: {time_str}"
                     details = f"value:{current_value},time:{time_str}"
                     
-                    st.warning(msg, icon="⚠️")
-                    self.send_telegram_alert(msg, issue_id, details)
+                    st.warning(st_msg, icon="⚠️")
+                    self.send_telegram_alert(tg_msg, issue_id, details)
                 else:
                     # Check if we need to send a resolution message
                     message_history = self.load_message_history()
                     if issue_id in message_history:
                         # Issue is now resolved
                         current_value = round(data['value'].iloc[i], 2)
-                        resolution_msg = f"{plant_name}, inverter {underperforming_serial} is now performing normally at {current_value} kW."
+                        # Bold for Telegram (HTML)
+                        resolution_msg = f"<b>{plant_name}</b>, inverter <b>{underperforming_serial}</b> is now performing normally at {current_value} kW."
                         resolution_id = f"{issue_id}_resolved"
                         self.send_telegram_alert(resolution_msg, resolution_id)
                         
@@ -195,18 +208,24 @@ class SolarMonitoringApp:
                 issue_id = f"{plant_name}_{serial_id}_low_power"
                 details = f"start:{start_time},end:{end_time},value:{value.iloc[-1]}"
                 
-                msg = f"{plant_name}, inverter {serial_id} detects low power.\nFrom {start_time} to {end_time}"
-                st.warning(msg, icon="⚠️")
-                self.send_telegram_alert(msg, issue_id, details)
+                # Bold for Streamlit warning
+                st_msg = f"**{plant_name}**, inverter **{serial_id}** detects low power.\nFrom {start_time} to {end_time}"
+                # Bold for Telegram (HTML)
+                tg_msg = f"<b>{plant_name}</b>, inverter <b>{serial_id}</b> detects low power.\nFrom {start_time} to {end_time}"
+                st.warning(st_msg, icon="⚠️")
+                self.send_telegram_alert(tg_msg, issue_id, details)
             elif value.iloc[-2] > 50000:
                 start_time = time.iloc[-2].strftime('%Y-%m-%d %H:%M')
                 end_time = time.iloc[-1].strftime('%Y-%m-%d %H:%M')
                 issue_id = f"{plant_name}_{serial_id}_power_drop"
                 details = f"start:{start_time},end:{end_time},from:{value.iloc[-2]},to:{value.iloc[-1]}"
                 
-                msg = f"{plant_name}, inverter {serial_id} detects high power drop.\nFrom {start_time} to {end_time}"
-                st.warning(msg, icon="⚠️")
-                self.send_telegram_alert(msg, issue_id, details)
+                # Bold for Streamlit warning
+                st_msg = f"**{plant_name}**, inverter **{serial_id}** detects high power drop.\nFrom {start_time} to {end_time}"
+                # Bold for Telegram (HTML)
+                tg_msg = f"<b>{plant_name}</b>, inverter <b>{serial_id}</b> detects high power drop.\nFrom {start_time} to {end_time}"
+                st.warning(st_msg, icon="⚠️")
+                self.send_telegram_alert(tg_msg, issue_id, details)
         else:
             # Check if we need to send resolution messages
             message_history = self.load_message_history()
@@ -399,7 +418,7 @@ class SolarMonitoringApp:
             if not df.empty:
                 # Add warning for deactivated inverters
                 for plant_name, serial in drop:
-                    st.warning(f"{plant_name}, inverter {serial} is deactivated.", icon="⚠️")
+                    st.warning(f"**{plant_name}**, inverter **{serial}** is deactivated.", icon="⚠️")
 
                 # Process and visualize data
                 filtered_data = df.dropna(subset=['value']).copy()
