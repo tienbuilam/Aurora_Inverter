@@ -41,7 +41,7 @@ class SolarMonitoringApp:
         
         if datetime_obj - timedelta(minutes=30) > timestamp_obj:
             timestamp_str = timestamp_obj.strftime('%Y-%m-%d %H:%M')
-            msg = f"{plant_name}, inverter {serial_id} outdated.\nLast update: {timestamp_str}"
+            msg = f"**{plant_name}**, inverter **{serial_id}** outdated.\nLast update: {timestamp_str}"
             st.warning(msg, icon="⚠️")
             return False
         else:
@@ -60,7 +60,7 @@ class SolarMonitoringApp:
                 if data['value'].iloc[i] < data['value'].iloc[0] * 0.25:
                     current_value = round(data['value'].iloc[i], 2)
                     time_str = time.strftime('%Y-%m-%d %H:%M')
-                    msg = f"{plant_name}, inverter {underperforming_serial} is underperforming with {current_value} kW.\nTime: {time_str}"
+                    msg = f"**{plant_name}**, inverter **{underperforming_serial}** is underperforming with {current_value} kW.\nTime: {time_str}"
                     st.warning(msg, icon="⚠️")
         else:
             return None
@@ -75,12 +75,12 @@ class SolarMonitoringApp:
             if value.iloc[-2] < 5000 and value.iloc[-3] < 5000:
                 start_time = time.iloc[-3].strftime('%Y-%m-%d %H:%M')
                 end_time = time.iloc[-1].strftime('%Y-%m-%d %H:%M')
-                msg = f"{plant_name}, inverter {serial_id} detects low power.\nFrom {start_time} to {end_time}"
+                msg = f"**{plant_name}**, inverter **{serial_id}** detects low power.\nFrom {start_time} to {end_time}"
                 st.warning(msg, icon="⚠️")
             elif value.iloc[-2] > 50000:
                 start_time = time.iloc[-2].strftime('%Y-%m-%d %H:%M')
                 end_time = time.iloc[-1].strftime('%Y-%m-%d %H:%M')         
-                msg = f"{plant_name}, inverter {serial_id} detects high power drop.\nFrom {start_time} to {end_time}"
+                msg = f"**{plant_name}**, inverter **{serial_id}** detects high power drop.\nFrom {start_time} to {end_time}"
                 st.warning(msg, icon="⚠️")
 
     def load_configurations(self):
@@ -240,7 +240,7 @@ class SolarMonitoringApp:
             if not df.empty:
                 # Add warning for deactivated inverters
                 for plant_name, serial in drop:
-                    st.warning(f"{plant_name}, inverter {serial} is deactivated.", icon="⚠️")
+                    st.warning(f"**{plant_name}**, inverter **{serial}** is deactivated.", icon="⚠️")
 
                 # Process and visualize data
                 filtered_data = df.dropna(subset=['value']).copy()

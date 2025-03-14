@@ -138,7 +138,7 @@ class SolarMonitoringApp:
         for name, ppa in zip(names, ppas):
             if (name == plant_name) & (ppa != None):
                 if data['Solar-toGrid'].iloc[-1] > ppa:
-                    st.warning(f"Plant {name} has exceeded the PPA limit of {ppa.round(2)} kWh. Current value: {data['Solar-toGrid'].iloc[-1].round(2)} kWh", icon="⚠️")
+                    st.warning(f"Plant **{name}** has exceeded the PPA limit of {ppa.round(2)} kWh. Current value: {data['Solar-toGrid'].iloc[-1].round(2)} kWh", icon="⚠️")
                     return True
                 return False
     
