@@ -270,8 +270,7 @@ class SolarMonitoringApp:
             yaxis=dict(
                 gridcolor='rgba(128,128,128,0.2)',
                 showgrid=True,
-                range=[0, max(valid_data['Solar'].max(), 
-                            valid_data['Consumption'].max()) * 1.1]
+                range=[0, max(100, max(valid_data['Solar'].max(), valid_data['Consumption'].max()) * 1.1)]
             )
         )
 

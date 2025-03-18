@@ -215,7 +215,7 @@ plant_names = list(inverters.keys())
 selected_plant = st.selectbox("Select a Plant", plant_names)
 
 # Generate date options for last 7 days (including today)
-date_options = [(datetime.now() - timedelta(days=i)).date() for i in range(6, -1, -1)]
+date_options = [(datetime.now() - timedelta(days=i)).date() for i in range(13, -1, -1)]
 selected_date = st.selectbox("Select Date", date_options, format_func=lambda d: d.strftime("%Y-%m-%d"))
 
 # Convert selected date to API format
@@ -403,8 +403,7 @@ if st.button("Fetch and Visualize Data"):
             yaxis=dict(
                 gridcolor='rgba(128,128,128,0.2)',
                 showgrid=True,
-                range=[0, max(valid_data['Solar'].max(), 
-                            valid_data['Consumption'].max()) * 1.1]
+                range=[0, max(100, max(valid_data['Solar'].max(), valid_data['Consumption'].max()) * 1.1)]
             )
         )
 
