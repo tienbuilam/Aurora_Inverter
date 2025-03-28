@@ -91,10 +91,41 @@ class SolarMonitoringApp:
             st_autorefresh(interval=remaining_seconds * 1000, key="precise_auto_refresh")
             st.text(f"Next refresh at: {next_refresh.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # def process_and_visualize_data(self):
-    #     """Process fetched data and create visualizations"""
+    def create_weather_table(self, all_day, now):
+    # Create a dictionary to hold the data
+        data = {
+            'Metric': [
+                '🕐Date/Hour', 
+                '🌡️Temperature (°C)', 
+                '💧Humidity (%)', 
+                '💨Wind Speed (km/h)', 
+                '☀️Solar Radiation (W/m²)', 
+                '🔆Solar Energy (MJ/m²)'
+            ],
+            'All Day': [
+                str(all_day.get('datetime', 'N/A')),
+                str(all_day.get('temp', 'N/A')),
+                str(all_day.get('humidity', 'N/A')),
+                str(all_day.get('windspeed', 'N/A')),
+                str(all_day.get('solarradiation', 'N/A')),
+                str(all_day.get('solarenergy', 'N/A'))
+            ],
+            'Current Moment': [
+                str(now.get('datetime', 'N/A')),
+                str(now.get('temp', 'N/A')),
+                str(now.get('humidity', 'N/A')),
+                str(now.get('windspeed', 'N/A')),
+                str(now.get('solarradiation', 'N/A')),
+                str(now.get('solarenergy', 'N/A'))
+            ]
+        }
         
-
+        # Convert to DataFrame
+        df = pd.DataFrame(data)
+        
+        # Display the table without index
+        st.table(df.set_index(df.columns[0]))
+        
     def run(self):
         """Main application runner"""
         st.set_page_config(page_title="Weather For All Site", layout="centered")
@@ -119,14 +150,14 @@ class SolarMonitoringApp:
                 if locations[count] == location:
                     count += 1
                     st.markdown(f"# :red[{location} Group:]")
-            all_day, now = self.fetch_weather_data(coordinates, hour    )
+            all_day, now = self.fetch_weather_data(coordinates, hour)
             st.write(f"## {site_name}")
-            st.write(f"### All day, Date: {all_day['datetime']}")
-            st.write(f"🌡️Temperature: {all_day['temp']}°C,💧Humidity: {all_day['humidity']}%, 💨Wind Speed: {all_day['windspeed']} km/h, ☀️Solar Radiation: {all_day['solarradiation']} W/m², 🔆Solar Energy: {all_day['solarenergy']} MJ/m²")
+            # st.write(f"### All day, Date: {all_day['datetime']}")
+            # st.write(f"🌡️Temperature: {all_day['temp']}°C,💧Humidity: {all_day['humidity']}%, 💨Wind Speed: {all_day['windspeed']} km/h, ☀️Solar Radiation: {all_day['solarradiation']} W/m², 🔆Solar Energy: {all_day['solarenergy']} MJ/m²")
 
-            st.write(f"### Now: {now['datetime']}")
-            st.write(f"🌡️Temperature: {now['temp']}°C, 💧Humidity: {now['humidity']}%, 💨Wind Speed: {now['windspeed']} km/h, ☀️Solar Radiation: {now['solarradiation']} W/m², 🔆Solar Energy: {now['solarenergy']} MJ/m²")
-
+            # st.write(f"### Now: {now['datetime']}")
+            # st.write(f"🌡️Temperature: {now['temp']}°C, 💧Humidity: {now['humidity']}%, 💨Wind Speed: {now['windspeed']} km/h, ☀️Solar Radiation: {now['solarradiation']} W/m², 🔆Solar Energy: {now['solarenergy']} MJ/m²")
+            self.create_weather_table(all_day, now)
 def main():
     try:
         app = SolarMonitoringApp()
