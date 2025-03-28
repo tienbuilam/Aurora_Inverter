@@ -103,7 +103,7 @@ class SolarMonitoringApp:
         self.auto_refresh_timer()
 
         # Set date range
-        hour = datetime.now().strftime("%Y-%m-%dT%H:00:00") # Current hour
+        hour = datetime.now(GMT_PLUS_7).strftime("%Y-%m-%dT%H:00:00") # Current hour
 
         # Fetch data in parallel
         st.write("Fetching weather data for all site today in 1-hour intervals...")
