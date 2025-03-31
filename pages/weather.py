@@ -77,7 +77,7 @@ class SolarMonitoringApp:
         while next_refresh <= current_time:
             next_refresh += timedelta(minutes=60)
         
-        return next_refresh + timedelta(minutes=5)
+        return next_refresh + timedelta(minutes=30)
 
     def auto_refresh_timer(self):
         """Handle auto-refresh logic"""
@@ -152,11 +152,6 @@ class SolarMonitoringApp:
                     st.markdown(f"# :red[{location} Group:]")
             all_day, now = self.fetch_weather_data(coordinates, hour)
             st.write(f"## {site_name}")
-            # st.write(f"### All day, Date: {all_day['datetime']}")
-            # st.write(f"🌡️Temperature: {all_day['temp']}°C,💧Humidity: {all_day['humidity']}%, 💨Wind Speed: {all_day['windspeed']} km/h, ☀️Solar Radiation: {all_day['solarradiation']} W/m², 🔆Solar Energy: {all_day['solarenergy']} MJ/m²")
-
-            # st.write(f"### Now: {now['datetime']}")
-            # st.write(f"🌡️Temperature: {now['temp']}°C, 💧Humidity: {now['humidity']}%, 💨Wind Speed: {now['windspeed']} km/h, ☀️Solar Radiation: {now['solarradiation']} W/m², 🔆Solar Energy: {now['solarenergy']} MJ/m²")
             self.create_weather_table(all_day, now)
 def main():
     try:
