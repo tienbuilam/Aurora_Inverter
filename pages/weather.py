@@ -55,13 +55,13 @@ class SolarMonitoringApp:
         sorted_data_all = {}
         for x in weather_all:
             for key, value in x.items():
-                if key == "datetime" or key == "temp" or key == "humidity" or key == "windspeed" or key == "solarradiation" or key == "solarenergy":
+                if key == "datetime" or key == "temp" or key == "humidity" or key == "windspeed" or key == "solarradiation" or key == "solarenergy" or key == "cloudcover":
                     sorted_data_all.update({key: value})
 
         weather_current = response.json().get("currentConditions")
         sorted_data_current = {}
         for key, value in weather_current.items():
-            if key == "datetime" or key == "temp" or key == "humidity" or key == "windspeed" or key == "solarradiation" or key == "solarenergy":
+            if key == "datetime" or key == "temp" or key == "humidity" or key == "windspeed" or key == "solarradiation" or key == "solarenergy" or key == "cloudcover":
                 sorted_data_current.update({key: value})
         
         return sorted_data_all, sorted_data_current
@@ -77,7 +77,7 @@ class SolarMonitoringApp:
         while next_refresh <= current_time:
             next_refresh += timedelta(minutes=60)
         
-        return next_refresh + timedelta(minutes=30)
+        return next_refresh + timedelta(minutes=15)
 
     def auto_refresh_timer(self):
         """Handle auto-refresh logic"""
@@ -98,7 +98,7 @@ class SolarMonitoringApp:
                 '🕐Date/Hour', 
                 '🌡️Temperature (°C)', 
                 '💧Humidity (%)', 
-                '💨Wind Speed (km/h)', 
+                '💨Wind Speed (km/h)',
                 '☀️Solar Radiation (W/m²)', 
                 '🔆Solar Energy (MJ/m²)'
             ],
@@ -129,15 +129,15 @@ class SolarMonitoringApp:
     def run(self):
         """Main application runner"""
         st.set_page_config(page_title="Weather For All Site", layout="centered")
-        st.title("Weather For All Site")
+        st.title("Weather For All Factories")
         # Apply auto-refresh timer
         self.auto_refresh_timer()
 
         # Set date range
-        hour = datetime.now(GMT_PLUS_7).strftime("%Y-%m-%dT%H:00:00") # Current hour
+        hour = datetime.now(GMT_PLUS_7).strftime("%Y-%m-%dT%H:%M:%S") # Current hour
 
         # Fetch data in parallel
-        st.write("Fetching weather data for all site today in 1-hour intervals...")
+        st.write("Getting weather data for all factories today and now in 1-hour intervals...")
         length = len(self.factory_info)
         locations = self.factory_info["Location"].unique()
         count = 0
