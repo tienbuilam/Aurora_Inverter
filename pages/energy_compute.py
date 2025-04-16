@@ -138,8 +138,7 @@ class SolarMonitoringApp:
             GMT_PLUS_7) + timedelta(days=1)
         # Date range picker
         st.markdown("### 📅Date Range Picker")
-        default_start, default_end = datetime.now(
-            GMT_PLUS_7), datetime.now(GMT_PLUS_7) + timedelta(days=1)
+        default_start, default_end = start, end
         date_range_string = date_range_picker(picker_type=PickerType.date,
                                               start=default_start, end=default_end,
                                               key='date_range_picker')
