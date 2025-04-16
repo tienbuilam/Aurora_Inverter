@@ -134,8 +134,10 @@ class SolarMonitoringApp:
         if not token:
             return
 
-        start, end = datetime.now(GMT_PLUS_7), datetime.now(
-            GMT_PLUS_7) + timedelta(days=1)
+        # Get current time in GMT+7
+        current_time = datetime.now(GMT_PLUS_7)
+        start, end = current_time, current_time + timedelta(days=1)
+
         # Date range picker
         st.markdown("### 📅Date Range Picker")
         default_start, default_end = start, end
@@ -151,9 +153,10 @@ class SolarMonitoringApp:
             f"If you pick the start date >= {default_end.strftime('%Y-%m-%d')}, it will be set to the {default_start.strftime('%Y-%m-%d')}")
         st.write(
             "Sometimes the data will be wrong (Aurora Vision error), please check the data manually.")
+
         if date_range_string:
             start_str, end_str = date_range_string
-            # Convert string dates to datetime objects
+            # Convert string dates to datetime objects in GMT+7
             start = datetime.strptime(
                 start_str, '%Y-%m-%d').replace(tzinfo=GMT_PLUS_7)
             end = datetime.strptime(
@@ -164,7 +167,7 @@ class SolarMonitoringApp:
             if start >= default_end:
                 start = default_start
 
-        # Format dates for API call
+        # Format dates for API call (ensure we're using the correct timezone)
         start_date = start.strftime("%Y%m%d")
         end_date = end.strftime("%Y%m%d")
 
@@ -199,7 +202,7 @@ class SolarMonitoringApp:
             else:
                 # Create empty data for sites without files
                 empty_data = pd.DataFrame({
-                    'start': pd.date_range(start=start, end=end-timedelta(days=1)).strftime('%Y-%m-%d'),
+                    'start': pd.date_range(start=start, end=end-timedelta(days=1), tz=GMT_PLUS_7).strftime('%Y-%m-%d'),
                     'value': '',
                     'Plant': site
                 })
