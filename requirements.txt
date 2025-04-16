@@ -6,3 +6,4 @@ pytz
 streamlit_autorefresh
 streamlit_date_picker
 openpyxl
+xlsxwriter
