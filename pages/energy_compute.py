@@ -103,16 +103,17 @@ class SolarMonitoringApp:
                 for result in results:
                     ts = result['start']
                     result.pop('units')
-                    result['start'] = datetime.fromtimestamp(
-                        ts).strftime("%Y-%m-%d")
+                    # Explicitly convert timestamp to datetime in GMT+7 timezone
+                    dt = datetime.fromtimestamp(ts, GMT_PLUS_7)
+                    result['start'] = dt.strftime("%Y-%m-%d")
                     all_data = pd.concat(
                         [all_data, pd.DataFrame([result])], ignore_index=True)
 
             result = all_data.groupby('start')['value'].sum().reset_index()
             return result
 
-        elif isinstance(entityID, int):
-            entityID = str(entityID)
+        elif isinstance(entityID, int) or (isinstance(entityID, float) and not pd.isna(entityID)):
+            entityID = str(int(entityID))
             all_data = pd.DataFrame()
             url = f"{self.BASE_URL}/v1/stats/energy/timeseries/{entityID}/GenerationEnergy/delta?sampleSize=Day&startDate={start}&endDate={end}&timeZone=Asia/Bangkok"
             response = requests.get(url, headers=headers)
@@ -121,11 +122,14 @@ class SolarMonitoringApp:
             for result in results:
                 ts = result['start']
                 result.pop('units')
-                result['start'] = datetime.fromtimestamp(
-                    ts).strftime("%Y-%m-%d")
+                # Explicitly convert timestamp to datetime in GMT+7 timezone
+                dt = datetime.fromtimestamp(ts, GMT_PLUS_7)
+                result['start'] = dt.strftime("%Y-%m-%d")
                 all_data = pd.concat(
                     [all_data, pd.DataFrame([result])], ignore_index=True)
             return all_data
+
+        return None
 
     def process_and_visualize_data(self):
         """Process fetched data and create visualizations"""
@@ -136,6 +140,10 @@ class SolarMonitoringApp:
 
         # Get current time in GMT+7
         current_time = datetime.now(GMT_PLUS_7)
+        # Display current time in GMT+7 for debugging
+        st.sidebar.write(
+            f"Current time (GMT+7): {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
         start, end = current_time, current_time + timedelta(days=1)
 
         # Date range picker
@@ -171,6 +179,8 @@ class SolarMonitoringApp:
         start_date = start.strftime("%Y%m%d")
         end_date = end.strftime("%Y%m%d")
 
+        st.sidebar.write(f"API Date Range: {start_date} to {end_date}")
+
         st.markdown("### ☀️Energy Generation Data")
 
         # Fetch data for all plants
@@ -191,7 +201,8 @@ class SolarMonitoringApp:
         excel_sites = self.all_plants['All Sites'].tolist()
 
         # Read and combine data from all plant files
-        energy_files = os.listdir("energy_data")
+        energy_files = os.listdir(
+            "energy_data") if os.path.exists("energy_data") else []
         for site in excel_sites:
             file = f"{site}.csv"
             if file in energy_files:
@@ -201,8 +212,10 @@ class SolarMonitoringApp:
                     [all_plants_data, plant_data], ignore_index=True)
             else:
                 # Create empty data for sites without files
+                date_range = pd.date_range(
+                    start=start.date(), end=(end-timedelta(days=1)).date())
                 empty_data = pd.DataFrame({
-                    'start': pd.date_range(start=start, end=end-timedelta(days=1), tz=GMT_PLUS_7).strftime('%Y-%m-%d'),
+                    'start': [d.strftime('%Y-%m-%d') for d in date_range],
                     'value': '',
                     'Plant': site
                 })
@@ -224,7 +237,8 @@ class SolarMonitoringApp:
             pivot_table = pivot_table.round(0)
 
             # Reorder columns to match Excel order
-            pivot_table = pivot_table[excel_sites]
+            if all(site in pivot_table.columns for site in excel_sites):
+                pivot_table = pivot_table[excel_sites]
 
             # Sort index (dates) in ascending order
             pivot_table = pivot_table.sort_index()
