@@ -1,10 +1,9 @@
-streamlit
+streamlit==1.34.0
 pandas
 plotly
 requests
 pytz
 streamlit_autorefresh
 streamlit_date_picker
-tenacity
-io
+openpyxl
 xlsxwriter
