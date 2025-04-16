@@ -5,3 +5,6 @@ requests
 pytz
 streamlit_autorefresh
 streamlit_date_picker
+tenacity
+io
+xlsxwriter
