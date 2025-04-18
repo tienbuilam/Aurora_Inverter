@@ -88,7 +88,7 @@ class SolarMonitoringApp:
 
         entityID = self.all_plants[self.all_plants['All Sites']
                                    == plant_name]['All Plants'].values[0]
-        if entityID == 'nan':
+        if pd.isna(entityID):
             return None
 
         elif isinstance(entityID, str):
@@ -109,10 +109,13 @@ class SolarMonitoringApp:
                     all_data = pd.concat(
                         [all_data, pd.DataFrame([result])], ignore_index=True)
 
+            # Ensure consistent data types before grouping
+            all_data['value'] = pd.to_numeric(
+                all_data['value'], errors='coerce')
             result = all_data.groupby('start')['value'].sum().reset_index()
             return result
 
-        elif isinstance(entityID, int) or (isinstance(entityID, float) and not pd.isna(entityID)):
+        elif isinstance(entityID, (int, float)) and not pd.isna(entityID):
             entityID = str(int(entityID))
             all_data = pd.DataFrame()
             url = f"{self.BASE_URL}/v1/stats/energy/timeseries/{entityID}/GenerationEnergy/delta?sampleSize=Day&startDate={start}&endDate={end}&timeZone=Asia/Bangkok"
@@ -127,6 +130,10 @@ class SolarMonitoringApp:
                 result['start'] = dt.strftime("%Y-%m-%d")
                 all_data = pd.concat(
                     [all_data, pd.DataFrame([result])], ignore_index=True)
+
+            # Ensure consistent data types
+            all_data['value'] = pd.to_numeric(
+                all_data['value'], errors='coerce')
             return all_data
 
         return None
@@ -147,20 +154,23 @@ class SolarMonitoringApp:
         start, end = current_time, current_time + timedelta(days=1)
 
         # Date range picker
-        st.markdown("### 📅Date Range Picker")
-        default_start, default_end = start, end
-        date_range_string = date_range_picker(picker_type=PickerType.date,
-                                              start=default_start, end=default_end,
-                                              key='date_range_picker')
-        st.write("#### ⚠️Note:")
-        st.write(
-            "The data will return from start date to end date - 1 day")
-        st.write(
-            f"If you pick the end date > {default_end.strftime('%Y-%m-%d')}, it will be set to the {default_end.strftime('%Y-%m-%d')}")
-        st.write(
-            f"If you pick the start date >= {default_end.strftime('%Y-%m-%d')}, it will be set to the {default_start.strftime('%Y-%m-%d')}")
-        st.write(
-            "Sometimes the data will be wrong (Aurora Vision error), please check the data manually.")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("### 📅Date Range Picker")
+            default_start, default_end = start, end
+            date_range_string = date_range_picker(picker_type=PickerType.date,
+                                                  start=default_start, end=default_end,
+                                                  key='date_range_picker')
+        with col2:
+            st.write("#### ⚠️Note:")
+            st.write(
+                "The data will return from start date to end date - 1 day")
+            st.write(
+                f"If you pick the end date > {default_end.strftime('%Y-%m-%d')}, it will be set to the {default_end.strftime('%Y-%m-%d')}")
+            st.write(
+                f"If you pick the start date >= {default_end.strftime('%Y-%m-%d')}, it will be set to the {default_start.strftime('%Y-%m-%d')}")
+            st.write(
+                "Sometimes the data will be wrong (Aurora Vision error), please check the data manually.")
 
         if date_range_string:
             start_str, end_str = date_range_string
@@ -183,15 +193,27 @@ class SolarMonitoringApp:
 
         st.markdown("### ☀️Energy Generation Data")
 
+        # IMPORTANT: Clean up previous data files before fetching new data
+        if os.path.exists("energy_data"):
+            # Clear all previous data files
+            for file in os.listdir("energy_data"):
+                file_path = os.path.join("energy_data", file)
+                try:
+                    if os.path.isfile(file_path):
+                        os.unlink(file_path)
+                        logger.info(f"Deleted previous data file: {file_path}")
+                except Exception as e:
+                    logger.error(f"Error deleting file {file_path}: {e}")
+        else:
+            # Create directory if it doesn't exist
+            os.makedirs("energy_data", exist_ok=True)
+
         # Fetch data for all plants
         all_plants = self.all_plants['All Sites'].unique()
         for plant in all_plants:
             data = self.fetch_1_day_energy_data(
                 token, plant, start_date, end_date)
             if data is not None:
-                # Create directory if it doesn't exist
-                os.makedirs("energy_data", exist_ok=True)
-
                 # Save data to CSV
                 filename = f"energy_data/{plant}.csv"
                 data.to_csv(filename, index=False)

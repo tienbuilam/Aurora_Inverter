@@ -288,20 +288,33 @@ class SolarMonitoringApp:
 
             for serial in serials:
                 filename = f"temp/{plant_name}/{serial}.csv"
-                if os.path.exists(filename):
-                    df_logger = pd.read_csv(filename)
-                    if df_logger['value'].notnull().any():
-                        if self.check_inverter_time(df_logger, plant_name):
-                            self.check_low_power_period(df_logger, plant_name)
-                        df = pd.concat([df, df_logger], ignore_index=True)
-                    else:
+                # Check if file exists and is not empty
+                if os.path.exists(filename) and os.path.getsize(filename) > 0:
+                    try:
+                        df_logger = pd.read_csv(filename)
+
+                        if not df_logger.empty and df_logger['value'].notnull().any():
+                            if self.check_inverter_time(df_logger, plant_name):
+                                self.check_low_power_period(
+                                    df_logger, plant_name)
+                            df = pd.concat([df, df_logger], ignore_index=True)
+                        else:
+                            drop.append([plant_name, serial])
+                    except pd.errors.EmptyDataError:
+                        logger.warning(f"Empty CSV file found: {filename}")
                         drop.append([plant_name, serial])
+                    except Exception as e:
+                        logger.error(
+                            f"Error reading file {filename}: {str(e)}")
+                        drop.append([plant_name, serial])
+                else:
+                    drop.append([plant_name, serial])
 
             if not df.empty:
                 # Add warning for deactivated inverters
                 for plant_name, serial in drop:
                     st.warning(
-                        f"**{plant_name}**, inverter **{serial}** is deactivated.", icon="⚠️")
+                        f"**{plant_name}**, inverter **{serial}** is deactivated or has no data.", icon="⚠️")
 
                 # Process data
                 filtered_data = df.dropna(subset=['value']).copy()
@@ -368,8 +381,7 @@ class SolarMonitoringApp:
                 )
 
                 fig.update_yaxes(range=[0, 100], title="Power Output (kW)")
-                fig.update_traces(
-                    hovertemplate='%{x} <br> Power: %{y:.2f} kW')
+                fig.update_traces(hovertemplate='%{x} <br> Power: %{y:.2f} kW')
                 fig.update_layout(height=400)
 
                 st.plotly_chart(fig, use_container_width=True)
