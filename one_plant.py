@@ -196,9 +196,12 @@ plant_names = list(inverters.keys())
 # Dropdown for plant selection
 selected_plant = st.selectbox("Select a Plant", plant_names)
 
+date = "2025-04-30"
+date = datetime.strptime(date, "%Y-%m-%d")
+
 # Generate date options for last 7 days (including today)
-date_options = [(datetime.now() - timedelta(days=i)).date()
-                for i in range(13, -1, -1)]
+date_options = [(date - timedelta(days=i)).date()
+                for i in range(60, -1, -1)]
 selected_date = st.selectbox(
     "Select Date", date_options, format_func=lambda d: d.strftime("%Y-%m-%d"))
 
@@ -289,6 +292,7 @@ if st.button("Fetch and Visualize Data"):
 
     if not valid_data.empty:
         # Process energy balance data
+        st.write(valid_data['value_power'] , valid_data['value_grid'])
         valid_data['Consumption'] = (
             valid_data['value_power'] - valid_data['value_grid']) / 1000
         valid_data['Consumption-fromGrid'] = valid_data['value_grid'].apply(
