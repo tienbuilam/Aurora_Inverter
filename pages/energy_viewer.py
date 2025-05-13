@@ -89,7 +89,7 @@ class EnergyBalanceApp:
         current_time = datetime.now(GMT_PLUS_7)
 
         # Refresh only during working hours (8:00 AM to 4:00 PM)
-        if 8 <= current_time.hour <= 16:
+        if 7 <= current_time.hour <= 16:
             next_refresh = self.calculate_next_refresh_time(current_time)
             remaining_seconds = int(
                 (next_refresh - current_time).total_seconds())
@@ -169,8 +169,7 @@ class EnergyBalanceApp:
                 units = entry.get('units', '')
 
                 if epoch:
-                    utc_time = datetime.utcfromtimestamp(
-                        epoch).replace(tzinfo=pytz.utc)
+                    utc_time = datetime.utcfromtimestamp(epoch).replace(tzinfo=pytz.utc)
                     local_time = utc_time.astimezone(GMT_PLUS_7)
                     datetime_str = local_time.strftime('%Y-%m-%d %H:%M:%S')
                     results.append([epoch, datetime_str, value, units])
