@@ -77,7 +77,7 @@ class SolarMonitoringApp:
         current_time = datetime.now(GMT_PLUS_7)
 
         # Refresh only during working hours (8:00 AM to 4:00 PM)
-        if 8 <= current_time.hour <= 16:
+        if 7 <= current_time.hour <= 16:
             next_refresh = self.calculate_next_refresh_time(current_time)
             remaining_seconds = int(
                 (next_refresh - current_time).total_seconds())

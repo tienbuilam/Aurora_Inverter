@@ -102,7 +102,7 @@ class SolarMonitoringApp:
                 results = data.get('result')
                 for result in results:
                     ts = result['start']
-                    result.pop('units')
+                    result.pop('units', None)
                     # Explicitly convert timestamp to datetime in GMT+7 timezone
                     dt = datetime.fromtimestamp(ts, GMT_PLUS_7)
                     result['start'] = dt.strftime("%Y-%m-%d")
@@ -124,7 +124,7 @@ class SolarMonitoringApp:
             results = data.get('result')
             for result in results:
                 ts = result['start']
-                result.pop('units')
+                result.pop('units', None)
                 # Explicitly convert timestamp to datetime in GMT+7 timezone
                 dt = datetime.fromtimestamp(ts, GMT_PLUS_7)
                 result['start'] = dt.strftime("%Y-%m-%d")
