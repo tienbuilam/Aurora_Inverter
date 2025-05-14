@@ -233,7 +233,15 @@ if st.button("Fetch and Visualize Data"):
         suffixes=('_power', '_grid'),
         how='outer'
     )
-    valid_data = merged_df.dropna(subset=['value_power', 'value_grid']).copy()
+    # Process energy balance data
+    merged_df['value_power'] = pd.to_numeric(
+        merged_df['value_power'], errors='coerce')
+    merged_df['value_grid'] = pd.to_numeric(
+        merged_df['value_grid'], errors='coerce')
+
+    # Replace empty strings with NaN and drop rows with NaN values
+    valid_data = merged_df.replace('', pd.NA).dropna(
+        subset=['value_power', 'value_grid']).copy()
 
     # Process and save data
     df = pd.DataFrame()
