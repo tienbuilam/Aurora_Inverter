@@ -243,6 +243,8 @@ if st.button("Fetch and Visualize Data"):
     valid_data = merged_df.replace('', pd.NA).dropna(
         subset=['value_power', 'value_grid']).copy()
 
+    st.write(valid_data)
+
     # Process and save data
     df = pd.DataFrame()
     for entityID, results in plant_data:
@@ -297,8 +299,15 @@ if st.button("Fetch and Visualize Data"):
 
     if not valid_data.empty:
         # Process energy balance data
+        valid_data['value_power'] = pd.to_numeric(
+            valid_data['value_power'], errors='coerce')
+        valid_data['value_grid'] = pd.to_numeric(
+            valid_data['value_grid'], errors='coerce')
+        valid_data.dropna(subset=['value_power', 'value_grid'], inplace=True)
+
         valid_data['Consumption'] = (
             valid_data['value_power'] - valid_data['value_grid']) / 1000
+
         valid_data['Consumption-fromGrid'] = valid_data['value_grid'].apply(
             lambda x: -x if x < 0 else 0) / 1000
         valid_data['Solar-toGrid'] = valid_data['value_grid'].apply(
