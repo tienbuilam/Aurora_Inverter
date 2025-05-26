@@ -233,7 +233,17 @@ if st.button("Fetch and Visualize Data"):
         suffixes=('_power', '_grid'),
         how='outer'
     )
-    valid_data = merged_df.dropna(subset=['value_power', 'value_grid']).copy()
+    # Process energy balance data
+    merged_df['value_power'] = pd.to_numeric(
+        merged_df['value_power'], errors='coerce')
+    merged_df['value_grid'] = pd.to_numeric(
+        merged_df['value_grid'], errors='coerce')
+
+    # Replace empty strings with NaN and drop rows with NaN values
+    valid_data = merged_df.replace('', pd.NA).dropna(
+        subset=['value_power', 'value_grid']).copy()
+
+    st.write(valid_data)
 
     # Process and save data
     df = pd.DataFrame()
@@ -289,8 +299,15 @@ if st.button("Fetch and Visualize Data"):
 
     if not valid_data.empty:
         # Process energy balance data
+        valid_data['value_power'] = pd.to_numeric(
+            valid_data['value_power'], errors='coerce')
+        valid_data['value_grid'] = pd.to_numeric(
+            valid_data['value_grid'], errors='coerce')
+        valid_data.dropna(subset=['value_power', 'value_grid'], inplace=True)
+
         valid_data['Consumption'] = (
             valid_data['value_power'] - valid_data['value_grid']) / 1000
+
         valid_data['Consumption-fromGrid'] = valid_data['value_grid'].apply(
             lambda x: -x if x < 0 else 0) / 1000
         valid_data['Solar-toGrid'] = valid_data['value_grid'].apply(
