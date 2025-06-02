@@ -386,7 +386,9 @@ class SolarMonitoringApp:
 
                 st.plotly_chart(fig, use_container_width=True)
                 st.markdown("---")
-
+            else:
+                st.warning(f"No data found for {plant_name}")
+                
     def run(self):
         """Main application logic"""
         st.title("Solar Plants Overview")
