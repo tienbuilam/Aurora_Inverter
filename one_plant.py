@@ -198,7 +198,7 @@ selected_plant = st.selectbox("Select a Plant", plant_names)
 
 # Generate date options for last 7 days (including today)
 date_options = [(datetime.now(gmt_plus_7) - timedelta(days=i)).date()
-                for i in range(90, -1, -1)]
+                for i in range(180, -1, -1)]
 selected_date = st.selectbox(
     "Select Date", date_options, format_func=lambda d: d.strftime("%Y-%m-%d"))
 
@@ -242,8 +242,6 @@ if st.button("Fetch and Visualize Data"):
     # Replace empty strings with NaN and drop rows with NaN values
     valid_data = merged_df.replace('', pd.NA).dropna(
         subset=['value_power', 'value_grid']).copy()
-
-    st.write(valid_data)
 
     # Process and save data
     df = pd.DataFrame()
